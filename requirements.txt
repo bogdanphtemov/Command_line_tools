@@ -1,0 +1,4 @@
+```text
+psutil==7.1.0
+send2trash==1.8.3
+```
