@@ -60,6 +60,52 @@ def scan_directory():
     """
     total_size = 0 # here we will store the total size of the files (in bytes)
     file_count = 0 # here we will store the number of files
+    if not os.path.exists(path):
+        return 0 , 0
+
+    # os.walk(path) — walks through a directory and all subdirectories
+    # root — current folder
+    # _ — list of subfolders (we don't need it, hence "_")
+    # files — list of files in this folder
+
+    for root , _, files in os.walk(path):
+        for f in files:
+            try:
+
+                fp = os.path.join(root , f)
+
+                total_size += os.path.getsize(fp)
+
+                file_count += 1
+
+            except (FileNotFoundError , PermissionError):
+                pass
+
+    return file_count , total_size        
+
+def clean_directory(path):
+
+    deleted = 0
+    freed = 0
+    if not os.path.exists(path):
+        return 0 , 0
+
+    for root , _ , files in os.walk(path):
+        for f in files:
+            try:
+                fp = os.path.join(root , f)
+
+                size = os.path.getsize(fp)
+
+                send2trash(fp)
+
+                deleted += 1
+                freed += size
+
+            except Exception:
+
+                pass
+    return deleted , freed   
 
     
 
