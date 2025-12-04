@@ -47,7 +47,8 @@ def choose_category():
     while True:
         clear_screen()
         print_header("Types of operation")
-
+        
+        # category list output
         for i , category in enumerate(MENU_STRUCTURE.keys() , start=1):
             print(f"{i}. {category}")
         print("\n0. Exit")
@@ -56,6 +57,7 @@ def choose_category():
 
         if choice == "0":
             break
+        # handling user selection
         try:
 
             category = list(MENU_STRUCTURE.keys())[int(choice) - 1]
@@ -71,6 +73,7 @@ def choose_operation(category):
         print_header(f"{category} - Operations")
         operations = MENU_STRUCTURE[category]
 
+        # number the operations to call them
         for i , op_name in enumerate(operations.keys() , start=1):
             print(f"{i}. {op_name}")
         print("\n0. Exit")
@@ -80,6 +83,7 @@ def choose_operation(category):
         if choice == "0":
             break
 
+        # Handling user selection
         try:
 
             op_name = list(operations.keys())[int(choice) - 1]
@@ -88,5 +92,6 @@ def choose_operation(category):
         except (ValueError , IndexError):
             input("!Incorrect choice!. Press Enter to try again...")
 
+# entry point to our program
 if __name__ == "__main__":
     choose_category()

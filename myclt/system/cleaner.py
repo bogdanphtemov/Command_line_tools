@@ -12,12 +12,11 @@ from send2trash import send2trash
 CLEAN_PATHS = {
     "Windows": [
         ("TEMP", ""),
-        ("LOCALAPPDATA" , "Temp"),
-        ("LOCALAPPDATA" , "Packages"),
-        ("APPDATA" , "Microsoft\\Windows\\Recent"),
+        ("LOCALAPPDATA", "Temp"),
+        ("LOCALAPPDATA", "Packages"),
+        ("APPDATA", "Microsoft\\Windows\\Recent"),
         ("LOCALAPPDATA", "Microsoft\\Windows\\INetCache"),
         ("LOCALAPPDATA", "Google\\Chrome\\User Data\\Default\\Cache"),
-        ("APPDATA", "Mozilla\\Firefox\\Profiles"),
         ("SYSTEMROOT", "SoftwareDistribution\\Download"),
     ],
     "Linux": [
@@ -25,16 +24,15 @@ CLEAN_PATHS = {
         "/tmp",
         "~/.local/share/Trash/files",
         "~/.var/app",
-        "~/.mozilla/firefox",
         "~/.config/google-chrome/Default/Cache",
     ],
-    "Darwin": [  # macOS
+    "Darwin": [
         "~/Library/Caches",
         "~/Library/Logs",
         "~/Library/Application Support/Google/Chrome/Default/Cache",
-        "~/Library/Application Support/Firefox/Profiles",
     ]
 }
+
 
 
 def get_temp_dirs():
@@ -114,10 +112,13 @@ def clean_directory(path):
                 pass
     return deleted , freed   
 
+# entry point to the cleaner.py utility
+# checks whether the file is run directly and not imported into another module
 if __name__ == "__main__":
     dirs = get_temp_dirs()
     print("scanning temporary directories...\n")
 
+# traversal of all folders and collection of statistics
     total_files , total_size = 0 , 0
     for d in dirs:
         files , size = scan_directory(d)
@@ -129,6 +130,7 @@ if __name__ == "__main__":
 
     confim = input("Do you want to delete them (they have been moved to the trash) y/n?: ").strip().lower()
 
+# browsing folders and deleting files
     if confim == "y":
         deleted , freed = 0 , 0
         for d in dirs:
@@ -140,4 +142,3 @@ if __name__ == "__main__":
         print(f"Amount of freed memory: {freed / 1024**2:.2f} MB")
     else:
         print("\nOperation is prohibited")
-
