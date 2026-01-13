@@ -1,5 +1,6 @@
 import platform
 import os
+import subprocess
 """
  project_creator.py is a basic utility for creating a simple structure for new projects
 """
@@ -31,7 +32,7 @@ LANGUAGES = {
             "*.tmp\n"
             "*.swp\n"
             ),
-            "src/__init__/py" : "",
+            "src/__init__.py" : "",
             "tests/__init__.py" : ""
         },
         "venv_command" : (
@@ -57,7 +58,7 @@ def choose_language():
    print("\nAvailable languages:")
 
    for lang in LANGUAGES: # Runs through all available languages
-    print(f" - {lang}")
+        print(f" - {lang}")
    
 # Starts an infinite loop until the language is selected correctly
    while True:
@@ -83,7 +84,7 @@ def create_project_folder():
 
     while True: # We create a loop where the user will enter a name for the project
 
-        project_name = input("Enter project name: ").split()
+        project_name = input("Enter project name: ").strip()
 
         if project_name == "":
             print("!Project name cannot be empty!")
@@ -103,10 +104,16 @@ def create_project_folder():
         if warning != "y":
             print("Operation cancelled.")
             return None
+# 
     else:
-        os.makedirs(project_path)
-        print(f"\nThe folder has been created: {project_path}")
+        try:
+            os.makedirs(project_path)
+            print(f"\nThe folder has been created: {project_path}")
+        except OSError as e:
+            print(f"!Cannot create project folder: {e}!")
+            return None
 
+      
     return project_path
 
 # Creates all folders and files according to the selected language
@@ -126,7 +133,7 @@ def generate_project_structure(project_path , language):
 
         with open(full_path , "w" , encoding="utf-8") as f:
             f.write(content)
-            f.close()
+            
         
         print(f"Created file: {full_path}")
 # create main files
@@ -134,8 +141,8 @@ def generate_project_structure(project_path , language):
     os.makedirs(os.path.dirname(main_path) , exist_ok=True)
 
     with open(main_path , "w" , encoding="utf-8") as f:
-        f.write(config["main_file_content: "])
-        f.close()
+        f.write(config["main_file_content"])
+        
     
     print(f"Created main file: {main_path}")
 
@@ -143,7 +150,103 @@ def generate_project_structure(project_path , language):
 
     print("\nproject structure has been successfully created!")
 
-# why code dont commit?
+# initialize Git
+def initilize_git(project_path):
+
+    print("\nInitializing Git repository...")
+
+    # Checking if git is installed or running at all
+    try:
+        subprocess.run(["git" , "--version"] , stdout=subprocess.PIPE , stderr=subprocess.PIPE)
+    
+    except FileNotFoundError:
+        print("!Git is not installed or not found in PATH!")
+        return
+    
+    # initialize Git
+    subprocess.run(["git" , "init"], cwd=project_path)
+
+    print("Git repository initialized.")
+
+    # Making the first commit
+    subprocess.run(["git" , "add" , "."] , cwd=project_path)
+    subprocess.run(["git" , "commit" , "-m" , "Initial project structure"] , cwd=project_path)
+
+    print("First commit implemented.")
+
+# Creating a virtual environment
+def initialize_venv(project_path , language):
+
+# venv is only needed by python
+    if language != "python":
+        return
+
+    print("\nCreating virtual environment...")
+# We extract the desired command
+    config = LANGUAGES[language]
+    venv_command = config["venv_command"]
+# Trying to create a virtual environment
+    try:
+        subprocess.run(
+            venv_command.split(),
+            cwd=project_path,
+            check=True
+        )
+    except subprocess.CalledProcessError:
+        print("!Failed to create virtual environment!")
+        return
+
+    print("Successfully created virtual environment.")
+
+# we tell the user where venv is located
+    venv_path = os.path.join(project_path , "venv")
+    print(f"Venv location: {venv_path}")
+
+# utility entry point
+if __name__ == "__main__":
+
+    print("\n=== Project Creator Utility ===\n")
+# user selects the language he needs
+    language = choose_language()
+
+# creating a project folder
+    project_path = create_project_folder()
+
+# We check if the function returned anything because there may be an access denial or an incorrect name
+    if project_path is None:
+        print("\nOperation cancelled.")
+        exit(0)
+# We create the initial project structure
+    generate_project_structure(project_path , language)
+
+# Initializing git
+    initilize_git(project_path)
+
+# If a virtual environment is needed, we create it
+    initialize_venv(project_path , language)
+
+    print("\nThe initial project structure has been successfully created.")
+
+    
+
+        
+
+
+
+
+
+    
+
+
+
+
+
+
+
+
+    
+
+
 
 
 

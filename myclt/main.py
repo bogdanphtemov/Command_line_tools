@@ -7,6 +7,7 @@ MENU_STRUCTURE = {
         "Cleaning temporary files" : "system/cleaner.py"
     },
     "Automation" : {
+        "Creating a minimal structure for a new project" : "automation/project_creator.py"
 
     },
     "FUN" : {
