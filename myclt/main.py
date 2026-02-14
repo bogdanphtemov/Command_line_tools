@@ -10,8 +10,8 @@ MENU_STRUCTURE = {
         "Creating a minimal structure for a new project" : "automation/project_creator.py"
 
     },
-    "FUN" : {
-
+    "ML" : {
+        "Linear Regression Model for Forecasting Continuous Values" : "ML/linear_regression_cli.py"
     }
 }    
 
