@@ -141,7 +141,7 @@ class Prepareddata:
     Data prepared , features selected , target selected.
     """
     X: np.ndarray
-    y: np.ndarray
+    Y: np.ndarray
 
     feature_names: List[str]
     target_name: str 
@@ -245,3 +245,187 @@ def manual_input_dataset() -> Dataset:
 
     data = np.array(numeric_rows , dtype=float)
     return Dataset(data=data , columns=colums)    
+
+def select_features_and_target(ds: Dataset) -> Prepareddata:
+    """
+    Lets user select target column and feature columns from dataset columns.
+    """
+
+    cols = ds.columns[:]
+    print("\nColums:")
+    for i , name in enumerate(cols , start=1):
+        print(f"{i}) {name}")
+    
+    target_idx = ask_int("\nSelect TARGET colums number: " , 1 , len(cols)) - 1
+    default_feaure_idxs = [i for i in range(len(cols)) if i != target_idx]
+
+    print("\nDefault FEATURES are all columns except target:")
+    print(", ".join(cols[i] for i in default_feaure_idxs))
+
+    if ask_yes_no("Do you want to manually choose feature columns? (y/n): "):
+        raw = input("Features: ").strip()
+        parts = [p.strip() for p in raw.split(",") if p.strip() != ""]
+        idxs = []
+        
+        for p in parts:
+            try:
+                val = int(p) - 1
+                if not (0 <= val < len(cols)):
+                    raise ValueError
+                idxs.append(val)
+            except ValueError:
+                raise ValueError("!nvalid feature index list!")
+        
+        if target_idx in idxs:
+            raise ValueError("!Target column cannot be included in features!")
+        
+        if len (idxs) < 1:
+            raise ValueError("!You must select at least 1 feature!")
+        
+        feature_idxs = idxs
+
+    else:
+
+        feature_idxs = default_feaure_idxs
+
+    X = ds.data[: , feature_idxs]
+    Y = ds.data[: , target_idx]
+
+    feature_names = [cols[i] for i in feature_idxs]
+    target_name = cols[target_idx]
+
+    return Prepareddata(
+        X=X,
+        Y=Y,
+        feature_names=feature_names,
+        target_name=target_name
+    )
+
+def train_test_split(X: np.ndarray, y: np.ndarray, test_size: float, seed:int) -> Tuple[np.ndarray , np.ndarray , np.ndarray , np.ndarray]:
+
+    """
+    Random split with fixed seed for reproducibility.
+    This is a standard practice in machine learning 
+    that helps detect overfitting of the model.
+    """
+    if not(0.05 <= test_size <= 0.5):
+        raise ValueError("!test_size should be between 0.05 and 0.5 for this tool!")
+    
+    # we take the number of examples
+    n = X.shape[0]
+    
+    # creating a random number generator with a fixed code for reproducibility of results
+    rng = np.random.RandomState(seed)
+    
+    # randomize indices
+    idx = np.arange(n)
+    rng.shuffle(idx)
+
+    test_n = int(round(n * test_size))
+    test_idx = idx[:test_n]
+
+    train_idx = idx[test_n:]
+
+    X_train = X[train_idx]
+    y_train = y[train_idx]
+
+    X_test = X[test_idx]
+    y_test = y[test_idx]
+
+    return X_train , X_test , y_train , y_test
+
+def standartize_fit(X_train: np.ndarray) -> Tuple[np.ndarray , np.ndarray , np.ndarray]:
+    """
+    Fit standardization on TRAIN only:
+    mean, std per feature.
+    Returns scaled X_train + mean + std.
+    """
+
+    mean = X_train.mean(axis=0)
+    std = X_train.std(axis=0)
+
+    # division by zero protection
+    std_safe = np.where(std == 0.0 , 1.0, std)
+    X_scaled = (X_train - mean) / std_safe
+
+    return X_scaled , mean , std_safe
+
+def standardize_apply(X: np.ndarray , mean: np.ndarray , std: np.ndarray) -> np.ndarray:
+    return (X - mean) / std
+
+
+# ============================================================
+# ML LAYER (Linear Regression with Batch Gradient Descent)
+# ============================================================
+
+class LinearRegressinGD:
+    """
+    y_hat = X @ w + b
+    Batch Gradient Descent minimizing MSE.
+    """
+    # Initialize the class (model) constructor
+    def __init__(self , learning_rate: float = 0.05 , epochs: int = 2000):
+        self.learning_rate = learning_rate
+        self.epochs = epochs
+        self.w: Optional[np.ndarray] = None
+        self.b: float = 0.0
+        self.loss_history: List[float] = []
+    # model training method
+    def fit(self , X: np.ndarray , y: np.ndarray) -> None:
+        # Initializing initial weights
+        n_samples , n_featurs = X.shape
+        self.w = np.zeros(n_featurs , dtype=float)
+        self.b = 0.0 
+        self.loss_history = []
+        
+        # model training cycle
+        for epoch in range(1 , self.epochs + 1):
+            # prediction and error detection
+            y_pred = X @ self.w + self.b
+            errors = y_pred - y
+            loss = float(np.mean(errors ** 2))
+            
+            # determination of new weights
+            self.loss_history.append(loss)
+            dw = (2.0 / n_samples) * (X.T @ errors)
+            db = (2.0 / n_samples) * float(np.sum(errors))
+
+            # weight change
+            self.w -= self.learning_rate * dw
+            self.b -= self.learning_rate * db 
+    # method of making predictions         
+    def predict(self , X: np.ndarray) -> np.ndarray:
+        if self.w is None:
+            raise RuntimeError("!Model is not trained yet!")
+        
+        return X @ self.w + self.b
+    
+# ============================================================
+# METRICS & PLOTS
+# ============================================================
+
+# simple model performance testing functions
+def mse(y_true: np.ndarray , y_pred: np.ndarray) -> float:
+    return float(np.mean((y_true - y_pred)) ** 2)
+
+def rmse(y_true: np.ndarray , y_pred: np.ndarray) -> float:
+    return float(np.sqrt(mse(y_true , y_pred)))
+
+def r2_score(y_true: np.ndarray , y_pred: np.ndarray) -> float:
+    ss_res = float(np.sum((y_true - y_pred) ** 2))
+    ss_tot = float(np.sum((y_true - np.mean(y_true)) ** 2))
+
+    if ss_tot == 0.0:
+        return 0.0
+    return 1.0 - (ss_res / ss_tot)
+# This function plots the model's training process — 
+# that is, how the error (loss) changed during training at each epoch
+def plot_loss_curve(history: List[float]) -> None:
+    plt.figure()
+    plt.plot(np.arange(1 , len(history) + 1) , history)
+    plt.xlabel("Epoch")
+    plt.ylabel("MSE Loss")
+    plt.title("Training Loss Curve")
+    plt.grid(True)
+    plt.show()
+
