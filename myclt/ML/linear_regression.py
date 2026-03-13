@@ -429,3 +429,88 @@ def plot_loss_curve(history: List[float]) -> None:
     plt.grid(True)
     plt.show()
 
+def plot_true_vs_pred(y_true: np.ndarray , y_pred: np.ndarray , title: str = "True vs Predicted") -> None:
+    
+    plt.figure()
+    plt.scatter(y_true , y_pred)
+    
+    mn = min(float(y_true.min()) , float(y_pred.min()))
+    mx = max(float(y_true.max()) , float(y_pred.max()))
+
+    plt.plot([mn , mx] , [mn , mx])
+
+    plt.xlabel("y_true")
+    plt.ylabel("y_pred")
+    plt.title(title)
+    plt.grid(True)
+    plt.show()
+
+def plot_1d_regression(x_raw: np.ndarray , y_true: np.ndarray , model: LinearRegressinGD , scaler_mean: Optional[np.ndarray] , scaler_std: Optional[np.ndarray],) -> None:
+    """
+    Plot:
+    - scatter of raw x vs y
+    - regression line using model, respecting scaling if enabled
+    """
+
+    # transforming the shape of an array
+    x_raw = x_raw.reshape(-1 , 1)
+
+    x_min , x_max = float(x_raw.min()) , float(x_raw.max())
+
+    x_grid = np.linspace(x_min , x_max , 200).reshape(-1 , 1)
+    
+    # checking whether standardization (scaling) is used
+    if scaler_mean is not None and scaler_std is not None:
+        """
+        If scaling is enabled
+        The model was trained on: X_scaled
+        Therefore, new values ​​must also be scaled.
+        """
+        x_grid_scaled = standardize_apply(x_grid , scaler_mean , scaler_std)
+        x_scaled = standardize_apply(x_raw , scaler_mean , scaler_std)
+    else:
+        # if standardization is not enabled leave as is
+        x_grid_scaled = x_grid
+        s_scaled = x_raw
+
+        y_line = model.predict(x_grid_scaled)
+        
+        plt.figure()
+        plt.scatter(x_raw.flatten() , y_true)
+        plt.plot(x_grid.flatten() , y_line)
+        plt.xlabel("Feature (raw)")
+        plt.ylabel("Target")
+        plt.title("1D Regression: data points + fitted line")
+        plt.grid(True)
+        plt.show()
+
+# ============================================================
+# APP STATE + CLI MENUS
+# ============================================================
+
+@dataclass
+class AppState:
+    dataset: Optional[Dataset] = None
+    prepareddata: Optional[Prepareddata] = None
+    test_size: float = 0.2
+    seed: int = 42
+    use_scaling: bool = True
+    learning_rate: float = 0.05
+    epochs: int = 2000
+
+    X_train: Optional[np.ndarray] = None
+    X_test: Optional[np.ndarray] = None
+    y_train: Optional[np.ndarray] = None
+    y_test: Optional[np.ndarray] = None
+
+    scaler_mean: Optional[np.ndarray] = None
+    scaled_std: Optional[np.ndarray] = None
+
+    model: Optional[LinearRegressinGD] = None
+
+    last_mse: Optional[float] = None
+    last_rmse: Optional[float] = None
+    last_r2: Optional[float] = None    
+
+
+
