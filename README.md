@@ -21,7 +21,4 @@ There are probably much better and more efficient programs that can solve the sa
 
 The terms of using this project are described in the **LICENSE** file.  
 Please **read the license carefully before using any part of this project**.
-
-## License
-
 This project is licensed under the MIT License — see the LICENSE file for details.
