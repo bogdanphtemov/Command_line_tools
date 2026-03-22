@@ -637,3 +637,6 @@ def menu_data(s: AppState) -> None:
 
         else:
             return
+        
+def menu_train(s: AppState) -> None:
+    pass
