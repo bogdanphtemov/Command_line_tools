@@ -146,7 +146,7 @@ class Prepareddata:
     feature_names: List[str]
     target_name: str 
 
-def load_csv_dataset(path:  str , dilimiter: str = ";") -> Dataset:
+def load_csv_dataset(path:  str , delimiter: str = ";") -> Dataset:
     """
     The function reads the csv file, checks if the number of rows and columns matches, and if any values are missing.
     If everything is correct, the values are stored for further training of the model.
@@ -155,7 +155,7 @@ def load_csv_dataset(path:  str , dilimiter: str = ";") -> Dataset:
         raise FileNotFoundError(f"!File not found error: {path}")
 
     with open(path, "r" , encoding="utf-8") as f:
-        reader = csv.reader(f , delimiter=dilimiter)
+        reader = csv.reader(f , delimiter=delimiter)
         rows = list(reader)
 
     if len (rows) < 2:
@@ -539,7 +539,101 @@ def rebuild_split(s: AppState) -> None:
     
     X , y = s.prepareddata.X , s.prepareddata.Y
 
-    X_train , X_test , y_train , y_test = train_test_split(X , y , )
+    X_train , X_test , y_train , y_test = train_test_split(X , y , test_size=s.test_size , seed = s.seed)
 
+    if s.use_scaling:
+        X_train_scaled , mean , std = standartize_fit(X_train)
+        X_test_scaled = standardize_apply(X_test , mean , std)
+        s.X_train , s.X_test = X_train_scaled , X_test_scaled
+        s.scaler_mean , s.scaled_std = mean , std
+    else:
+        s.X_train , s.X_test = X_train , X_test
+        s.scaler_mean , s.scaled_std = None , None
 
+    s.y_train , s.y_test = y_train , y_test
+    # reset model+metrics because the data pipeline changed
+    s.model = None
+    s.last_mse = s.last_rmse = s.last_r2 = None
 
+def menu_data(s: AppState) -> None:
+    while True:
+        clear_screen()
+        print_header("Linear Regression Tool — Data")
+        print_status(s)
+
+        options = [
+            "Load CSV dataset",
+            "Menual input dataset",
+            "Show dataset summary",
+            "Select features + target",
+            "Configure train/test split",
+            "Back",
+        ]
+
+        choice = ask_choice("" , options)
+
+        if choice == 0:
+            path = input("CSV path: ").strip()
+            try:
+                s.dataset = load_csv_dataset(path , delimiter= ";")  
+                s.prepareddata = None
+                s.model = None
+                s.last_mse = s.last_rmse = s.last_r2 = None
+                print("Dataset loaded successfully.")
+            except Exception as e:
+                print(f"!Error: {e}!")
+            pause()
+
+        elif choice == 1:
+            try:
+                s.dataset == manual_input_dataset()
+                s.prepareddata == None
+                s.model = None
+                s.last_mse = s.last_rmse = s.last_r2 = None
+                print("Dataset loaded successfully.")
+            except:
+                print(f"!Error: {e}!")
+            pause()
+        
+        elif choice == 2:
+            if s.dataset is None:
+                print("!No dataset loaded!")
+                pause()
+                continue
+            ds = s.dataset
+            print("\nSummary:")
+            print(f"Rows: {ds.data.shape[0]}")
+            print(f"Colums: {ds.data.shape[1]}")
+
+            for i , name in enumerate(ds.columns):
+                col = ds.data[:,i]
+                print(f"- {name}: min = {col.min():.4f} mean = {col.mean():.4f} max = {col.max():.4f}")
+            pause()
+
+        elif choice == 3:
+            if s.dataset is None:
+                print("!Load or create a dataset first!")
+                pause()
+                continue
+            try:
+                s.prepareddata = select_features_and_target(s.dataset)
+                rebuild_split(s)
+                print("\nSelection saved and train/test split rebuilt.")
+            except Exception as e:
+                print(f"!Error: {e}!")
+            pause()
+
+        elif choice == 4:
+            s.test_size = ask_flout("test_size (0.05-0.5): " , 0.05 , 0.5)
+            s.seed = ask_int("seed (integer): ")
+
+            if s.prepareddata is not None:
+                try:
+                    rebuild_split(s)
+                    print("Split rebuilt.")
+                except Exception as e:
+                    print(f"!Error: {e}")
+            pause()
+
+        else:
+            return
