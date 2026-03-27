@@ -19,6 +19,8 @@ import os
 from dataclasses import dataclass
 from typing import List , Optional , Tuple
 import numpy as np
+import matplotlib
+matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 
 ###==========================================================================
@@ -84,7 +86,7 @@ def ask_int(prompt: str, min_val: Optional[int] = None , max_val: Optional[int] 
             print("!Please enter the data type: Integer")
 
 # function for inputting flout parameters
-def ask_flout(prompt: str , min_val: Optional[float] = None , max_val: Optional[float] = None) -> float:
+def ask_float(prompt: str , min_val: Optional[float] = None , max_val: Optional[float] = None) -> float:
     while True:
 
         raw = input(prompt).strip()
@@ -101,13 +103,13 @@ def ask_flout(prompt: str , min_val: Optional[float] = None , max_val: Optional[
             return v
 
         except ValueError: 
-            print("!Please enter the data type: Flout")
+            print("!Please enter the data type: Float")
 
 # check user decisions
-def ask_yes_no(promt: str) -> bool:
+def ask_yes_no(prompt: str) -> bool:
     while True:
         
-        raw = input(promt).strip().lower()
+        raw = input(prompt).strip().lower()
 
         if raw in ("y" , "yes"):
             return True
@@ -228,7 +230,7 @@ def manual_input_dataset() -> Dataset:
 
         if len(parts) != n_cols:
             print(f"!Expected {n_cols} values , got {len(parts)}! Try again...")
-        
+            continue
         try: 
 
             row = [float(p) for p in parts]
@@ -334,7 +336,7 @@ def train_test_split(X: np.ndarray, y: np.ndarray, test_size: float, seed:int) -
 
     return X_train , X_test , y_train , y_test
 
-def standartize_fit(X_train: np.ndarray) -> Tuple[np.ndarray , np.ndarray , np.ndarray]:
+def standardize_fit(X_train: np.ndarray) -> Tuple[np.ndarray , np.ndarray , np.ndarray]:
     """
     Fit standardization on TRAIN only:
     mean, std per feature.
@@ -358,7 +360,7 @@ def standardize_apply(X: np.ndarray , mean: np.ndarray , std: np.ndarray) -> np.
 # ML LAYER (Linear Regression with Batch Gradient Descent)
 # ============================================================
 
-class LinearRegressinGD:
+class LinearRegressionGD:
     """
     y_hat = X @ w + b
     Batch Gradient Descent minimizing MSE.
@@ -373,8 +375,8 @@ class LinearRegressinGD:
     # model training method
     def fit(self , X: np.ndarray , y: np.ndarray) -> None:
         # Initializing initial weights
-        n_samples , n_featurs = X.shape
-        self.w = np.zeros(n_featurs , dtype=float)
+        n_samples , n_features = X.shape
+        self.w = np.zeros(n_features , dtype=float)
         self.b = 0.0 
         self.loss_history = []
         
@@ -406,7 +408,7 @@ class LinearRegressinGD:
 
 # simple model performance testing functions
 def mse(y_true: np.ndarray , y_pred: np.ndarray) -> float:
-    return float(np.mean((y_true - y_pred)) ** 2)
+    return float(np.mean((y_true - y_pred) ** 2))
 
 def rmse(y_true: np.ndarray , y_pred: np.ndarray) -> float:
     return float(np.sqrt(mse(y_true , y_pred)))
@@ -428,6 +430,7 @@ def plot_loss_curve(history: List[float]) -> None:
     plt.title("Training Loss Curve")
     plt.grid(True)
     plt.show()
+    
 
 def plot_true_vs_pred(y_true: np.ndarray , y_pred: np.ndarray , title: str = "True vs Predicted") -> None:
     
@@ -445,7 +448,7 @@ def plot_true_vs_pred(y_true: np.ndarray , y_pred: np.ndarray , title: str = "Tr
     plt.grid(True)
     plt.show()
 
-def plot_1d_regression(x_raw: np.ndarray , y_true: np.ndarray , model: LinearRegressinGD , scaler_mean: Optional[np.ndarray] , scaler_std: Optional[np.ndarray],) -> None:
+def plot_1d_regression(x_raw: np.ndarray , y_true: np.ndarray , model: LinearRegressionGD , scaler_mean: Optional[np.ndarray] , scaler_std: Optional[np.ndarray],) -> None:
     """
     Plot:
     - scatter of raw x vs y
@@ -471,18 +474,18 @@ def plot_1d_regression(x_raw: np.ndarray , y_true: np.ndarray , model: LinearReg
     else:
         # if standardization is not enabled leave as is
         x_grid_scaled = x_grid
-        s_scaled = x_raw
+        x_scaled = x_raw
 
-        y_line = model.predict(x_grid_scaled)
+    y_line = model.predict(x_grid_scaled)
         
-        plt.figure()
-        plt.scatter(x_raw.flatten() , y_true)
-        plt.plot(x_grid.flatten() , y_line)
-        plt.xlabel("Feature (raw)")
-        plt.ylabel("Target")
-        plt.title("1D Regression: data points + fitted line")
-        plt.grid(True)
-        plt.show()
+    plt.figure()
+    plt.scatter(x_raw.flatten() , y_true)
+    plt.plot(x_grid.flatten() , y_line)
+    plt.xlabel("Feature (raw)")
+    plt.ylabel("Target")
+    plt.title("1D Regression: data points + fitted line")
+    plt.grid(True)
+    plt.show()
 
 # ============================================================
 # APP STATE + CLI MENUS
@@ -508,7 +511,7 @@ class AppState:
     scaler_mean: Optional[np.ndarray] = None
     scaled_std: Optional[np.ndarray] = None
 
-    model: Optional[LinearRegressinGD] = None
+    model: Optional[LinearRegressionGD] = None
     
     # last evaluation
     last_mse: Optional[float] = None
@@ -518,14 +521,14 @@ class AppState:
 # this function determines which values ​​we have already defined and displays this information to the user
 def print_status(s: AppState) -> None:
     ds = "none" if s.dataset is None else f"loaded ({s.dataset.data.shape[0]} rows , {s.dataset.data.shape[1]} cols)"
-    sup = "none" if s.prepareddata is None else f"{len(s.prepareddata.feature_names)} featuters -> target '{s.prepareddata.target_name}'"
+    sup = "none" if s.prepareddata is None else f"{len(s.prepareddata.feature_names)} features -> target '{s.prepareddata.target_name}'"
     trained = "no" if s.model is None else "yes"
-    metrics = "none" if s.last_mse is None else f"RMSE={s.last_rmse:.4f} | R2={s.last_r2:.4f}"
+    metrics = "none" if s.last_rmse is None else f"RMSE={s.last_rmse:.4f} | R2={s.last_r2:.4f}"
     
     print(f"Dataset: {ds}")
     print(f"Selection: {sup}")
     print(f"Split: test_size = {s.test_size}; seed =  {s.seed}")
-    print(f"Scaling: {"ON" if s.use_scaling else "OFF"}")
+    print(f"Scaling: {'ON' if s.use_scaling else 'OFF'}")
     print(f"Model: trained = {trained} (lr = {s.learning_rate} , epochs = {s.epochs})")
     print(f"Metrics: {metrics}")
     print("=" * 72)
@@ -542,7 +545,7 @@ def rebuild_split(s: AppState) -> None:
     X_train , X_test , y_train , y_test = train_test_split(X , y , test_size=s.test_size , seed = s.seed)
 
     if s.use_scaling:
-        X_train_scaled , mean , std = standartize_fit(X_train)
+        X_train_scaled , mean , std = standardize_fit(X_train)
         X_test_scaled = standardize_apply(X_test , mean , std)
         s.X_train , s.X_test = X_train_scaled , X_test_scaled
         s.scaler_mean , s.scaled_std = mean , std
@@ -556,6 +559,10 @@ def rebuild_split(s: AppState) -> None:
     s.last_mse = s.last_rmse = s.last_r2 = None
 
 def menu_data(s: AppState) -> None:
+    """
+    Menu for interacting with data loading functions, manually or from a file, viewing the contents 
+    of the dataset, selecting features and target, and splitting into training and learning data
+    """
     while True:
         clear_screen()
         print_header("Linear Regression Tool — Data")
@@ -563,7 +570,7 @@ def menu_data(s: AppState) -> None:
 
         options = [
             "Load CSV dataset",
-            "Menual input dataset",
+            "Manual input dataset",
             "Show dataset summary",
             "Select features + target",
             "Configure train/test split",
@@ -586,12 +593,12 @@ def menu_data(s: AppState) -> None:
 
         elif choice == 1:
             try:
-                s.dataset == manual_input_dataset()
-                s.prepareddata == None
+                s.dataset = manual_input_dataset()
+                s.prepareddata = None
                 s.model = None
                 s.last_mse = s.last_rmse = s.last_r2 = None
                 print("Dataset loaded successfully.")
-            except:
+            except Exception as e:
                 print(f"!Error: {e}!")
             pause()
         
@@ -624,7 +631,7 @@ def menu_data(s: AppState) -> None:
             pause()
 
         elif choice == 4:
-            s.test_size = ask_flout("test_size (0.05-0.5): " , 0.05 , 0.5)
+            s.test_size = ask_float("test_size (0.05-0.5): " , 0.05 , 0.5)
             s.seed = ask_int("seed (integer): ")
 
             if s.prepareddata is not None:
@@ -637,6 +644,247 @@ def menu_data(s: AppState) -> None:
 
         else:
             return
-        
+
+# menu for interacting with the model training functions, setting hyperparameters and training the model respectively      
 def menu_train(s: AppState) -> None:
-    pass
+    while True:
+        clear_screen()
+        print_header("Linear Regression Tool — Train")
+        print_status(s)
+
+        options = [
+            "Configure hyperparameters",
+            "Train model",
+            "Back",
+        ]
+        
+        choice = ask_choice("" , options)
+
+        if choice == 0:
+            s.use_scaling = ask_yes_no("Enable standardization scaling? (y/n): ")
+            s.learning_rate = ask_float("learning_rate (e.g. 0.01..0.2): ", 1e-6, 10.0)
+            s.epochs = ask_int("epochs (e.g. 500..10000): ", 1, 1_000_000)
+
+            if s.prepareddata is not None:
+                try:
+                    rebuild_split(s)
+                    print("Data pipeline rebuilt with new settings.")
+                except Exception as e:
+                        print(f"! Error: {e}")
+
+            pause()
+        
+        elif choice == 1:
+            if s.prepareddata is None:
+                print("!Select features + target first (Data menu)!")
+                pause()
+                continue
+            if s.X_train is None or s.y_train is None:
+                print("!Split data not ready!")
+                pause()
+                continue
+            
+            model = LinearRegressionGD(learning_rate=s.learning_rate , epochs=s.epochs)
+            model.fit(s.X_train , s.y_train)
+
+            s.model = model
+
+            s.last_mse = s.last_rmse = s.last_r2 = None
+
+            final_loss = model.loss_history[-1] if model.loss_history else None
+
+            if final_loss is not None:
+                print(f"Training finished. Final train MSE loss: {final_loss:.6f}")
+            else:
+                print("Training finished")
+            pause()
+        else:
+            return
+
+# menu for using functions to evaluate model performance, such as the mean square error         
+def menu_evaluate(s: AppState) -> None:
+    while True:
+        clear_screen()
+        print_header("Linear Regression Tool — Evaluate")
+        print_status(s)
+
+        options = [
+            "Evaluate on test set",
+            "Explain metrics",
+            "Back",
+        ]
+
+        choice = ask_choice("" , options)
+
+        if choice == 0:
+            if s.model is None:
+                print("!Train the model first!")
+                pause()
+                continue
+            
+            if s.X_test is None or s.y_test is None:
+                print("!Test set not ready!")
+                pause()
+                continue
+
+            y_pred = s.model.predict(s.X_test)
+            s.last_mse = mse(s.y_test , y_pred)
+            s.last_rmse = rmse(s.y_test , y_pred)
+            s.last_r2 = r2_score(s.y_test , y_pred)
+
+            print("\nTest metrics:")
+            print(f"MSE : {s.last_mse:.6f}")
+            print(f"RMSE : {s.last_rmse:.6f}")
+            print(f"R^2 : {s.last_r2:.6f}")
+            pause()
+        
+        elif choice == 1:
+            print("\nMetric explanations (short):")
+            print("- MSE  : average squared error (penalizes big errors strongly)")
+            print("- RMSE : sqrt(MSE), error in the same units as target y (more intuitive)")
+            print("- R^2  : how much variance is explained by the model (1.0 is perfect; <0 means worse than predicting mean)")
+            pause()
+        
+        else:
+            return
+
+# menu to use the forecasting function, create forecasts on new, previously unseen data
+def menu_predict(s: AppState) -> None:
+    while True:
+        clear_screen()
+        print_header("Linear Regression Tool — Predict")
+        print_status(s)
+
+        options = [
+            "Predict for ONE object (enter feature values)",
+            "Back",
+        ]
+
+        choice = ask_choice("" , options)
+
+        if choice == 0:
+            if s.model is None or s.prepareddata is None:
+                print("!Need trained model and selected features!")
+                pause()
+                continue
+            
+            vals = []
+
+            print("\nEnter feature values:")
+
+            for name in s.prepareddata.feature_names:
+                v = ask_float(f"{name}: ")
+                vals.append(v)
+            
+            X_new = np.array(vals ,dtype=float).reshape(1 , -1)
+
+            if s.use_scaling and s.scaler_mean is not None and s.scaled_std is not None:
+                X_new = standardize_apply(X_new , s.scaler_mean , s.scaled_std)
+
+            y_hat = float(s.model.predict(X_new)[0])
+
+            print(f"\nPredicted {s.prepareddata.target_name}: {y_hat:.6f}")
+
+            pause()
+        
+        else:
+            return
+
+# menu for using the visualization function, building various graphs
+def menu_visualize(s: AppState) -> None:
+    while True:
+        clear_screen()
+        print_header("Linear Regression Tool - Visualize")
+        print_status(s)
+
+        options = [
+            "Plot loss curve (needs trained model)",
+            "Plot True vs Predicted (test set)",
+            "Plot 1D regression (only if 1 feature)",
+            "Back",
+        ]
+                
+        choice = ask_choice("" , options)
+
+        if choice == 0:
+            if s.model is None:
+                print("!Train model first!")
+                pause()
+                continue
+
+            plot_loss_curve(s.model.loss_history)
+            pause()
+
+        elif choice == 1:
+            if s.model is None or s.X_test is None or s.y_test is None:
+                print("!Need trained model and test set!")
+                pause()
+                continue
+
+            y_pred = s.model.predict(s.X_test)
+
+            plot_true_vs_pred(s.y_test , y_pred , title="True vs Predicted (test set)")
+            pause()
+
+        elif choice == 2:
+            if s.model is None or s.prepareddata is None:
+                print("!Need trained model and selected features!")
+                pause()
+                continue
+            if len(s.prepareddata.feature_names) != 1:
+                print("!1D regression plot works only when you selected exactly 1 feature!")
+                pause()
+                continue
+                
+            x_raw = s.prepareddata.X[: , 0]
+            y_true = s.prepareddata.Y
+          
+            plot_1d_regression(
+                x_raw=x_raw,
+                y_true=y_true,
+                model=s.model,
+                scaler_mean=s.scaler_mean,
+                scaler_std=s.scaled_std,
+            )
+            pause()
+
+        else:
+            return
+
+# "entry point" of the entire CLI tool
+def main() -> None:
+    state = AppState()
+    
+    while True:
+        clear_screen()
+        print_header("Linear Regression Tool (MVP)")
+        print_status(state)
+
+        options = [
+            "Data",
+            "Train",
+            "Evaluate",
+            "Predict",
+            "Visualize",
+            "Exit",
+        ]
+
+        choice = ask_choice("" , options)
+
+        if choice == 0:
+            menu_data(state)
+        elif choice == 1:
+            menu_train(state)
+        elif choice == 2:
+            menu_evaluate(state)
+        elif choice == 3:
+            menu_predict(state)
+        elif choice == 4:
+            menu_visualize(state)
+        else:
+            return
+        # do not pause here; main.py already pauses after subprocess returns
+
+
+if __name__ == "__main__":
+    main()

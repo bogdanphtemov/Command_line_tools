@@ -11,7 +11,7 @@ MENU_STRUCTURE = {
 
     },
     "ML" : {
-        "Linear Regression Model for Forecasting Continuous Values" : "ML/linear_regression_cli.py"
+        "Linear Regression Model for Forecasting Continuous Values" : "ML/linear_regression.py"
     }
 }    
 
