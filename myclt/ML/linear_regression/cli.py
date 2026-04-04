@@ -1,7 +1,7 @@
 from .ui import menu_data , menu_train , menu_evaluate , menu_predict , menu_visualize
 from .app_state import AppState , print_status
-from ...common.ui_helpers import clear_screen , print_header
-from ...common.input_validation import ask_choice
+from common.ui_helpers import clear_screen , print_header
+from common.input_validation import ask_choice
 
 """
 linear_regression_cli.py

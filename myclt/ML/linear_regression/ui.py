@@ -6,8 +6,8 @@ from .preprocessing import standardize_apply
 from .metrics import mse , rmse , r2_score
 from .visualization import plot_loss_curve , plot_true_vs_pred , plot_1d_regression
 from .core import LinearRegressionGD
-from ...common.input_validation import ask_choice , ask_int , ask_float , ask_yes_no
-from ...common.ui_helpers import clear_screen , print_header , pause
+from common.input_validation import ask_choice , ask_int , ask_float , ask_yes_no
+from common.ui_helpers import clear_screen , print_header , pause
 
 def menu_data(s: AppState) -> None:
     """
