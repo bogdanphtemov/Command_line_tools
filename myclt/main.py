@@ -1,6 +1,7 @@
 import os
 import subprocess
 
+from ML.linear_regression.cli import main as run_linear_regression
 
 MENU_STRUCTURE = {
     "Systemic" : {
@@ -11,7 +12,7 @@ MENU_STRUCTURE = {
 
     },
     "ML" : {
-        "Linear Regression Model for Forecasting Continuous Values" : "ML.linear_regression"
+        "Linear Regression Model for Forecasting Continuous Values" : run_linear_regression
     }
 }    
 
@@ -28,29 +29,23 @@ def print_header(title):
 # Executes the script
 def run_script(script_path):
     clear_screen()
-    print_header(f"Launching {script_path}")
+    
+    if callable(script_path):
+        try:
+            script_path()
+        except Exception as e:
+            print(f"!ERROR!: {e}")
+    else:
+        print_header(f"Launching {script_path}")
+        try:
+            subprocess.run(["python" , script_path] , check=True)
+        except Exception as e:
+            print(f"!ERROR!: {e}")
 
-    try:
-        # ПЕРЕВІРЯЄМО, чи це модуль
-        if "." in script_path and not script_path.endswith(".py"):
-            # Це модуль — запускаємо через subprocess з флагом -m
-            print(f"[INFO] Running module: {script_path}")
-            subprocess.run(["python3", "-m", script_path], check=True)
-        else:
-            # Це скрипт
-            print(f"[INFO] Running script: {script_path}")
-            subprocess.run(["python3", script_path], check=True)
-    
-    except FileNotFoundError:
-        print(f"!ERROR!: File or module '{script_path}' not found") 
-    except subprocess.CalledProcessError as e:
-        print(f"!ERROR!: Execution error {script_path}: {e}")
-    except Exception as e:
-        print(f"!ERROR!: Unknown error: {e}")
-    
     input("\nPress Enter to return to the menu...")
 
-
+    
+    
 def choose_category():
     """Main menu - operation selection"""
     while True:

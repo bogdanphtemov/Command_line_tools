@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import List
 import numpy as np
 
-from ...common import ask_int, ask_yes_no
+from common.input_validation import ask_int, ask_yes_no
 
 # Data storage object (has no logic)
 @dataclass
