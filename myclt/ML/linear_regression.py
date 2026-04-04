@@ -474,7 +474,7 @@ def plot_1d_regression(x_raw: np.ndarray , y_true: np.ndarray , model: LinearReg
     else:
         # if standardization is not enabled leave as is
         x_grid_scaled = x_grid
-        x_scaled = x_raw
+        
 
     y_line = model.predict(x_grid_scaled)
         
