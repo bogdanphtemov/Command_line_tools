@@ -8,7 +8,105 @@ from .visualization import plot_loss_curve , plot_true_vs_pred , plot_1d_regress
 from .core import LinearRegressionGD
 from common.input_validation import ask_choice , ask_int , ask_float , ask_yes_no
 from common.ui_helpers import clear_screen , print_header , pause
+from ML.model_storage import save_model , load_model , list_saved_models , delete_model
 
+def menu_save_load(s: AppState) -> None:
+    while True:
+        clear_screen()
+        print_header("Linear Regression Tool — Save/Load")
+        print_status(s)
+
+        options = [
+            "Save trained model",
+            "Load model",
+            "List saved models",
+            "Delete model",
+            "Back",
+        ]
+
+        choice = ask_choice("" , options)
+
+        if choice == 0:
+            if s.model is None:
+                print("!Model not loaded!")
+                pause()
+                continue
+
+            if not s.model.is_trained:
+                print("!Model is not trained yet!")
+                pause()
+                continue
+
+            name = input("Enter model name (e.g. , 'my_lr_model'): ").strip()
+            if not name:
+                print("!Invalid name!")
+                pause()
+                continue
+
+            try:
+                filepath = f"./ml_models/{name}.pkl"
+                save_model(s.model , filepath)
+                print(f"Model '{name}' saved successfully")
+            except Exception as e:
+                print(f"!Error: {e}!")
+            pause()
+
+        elif choice == 1:
+            models = list_saved_models()
+            if not models:
+                print("!No saved models!")
+                pause()
+                continue
+
+            print("\nAvailable models:")
+            for i , model_name in enumerate(models , 1):
+                print(f"{i}. {model_name}")
+            
+            try:
+                idx = int(input("Select model number: ")) - 1
+                if 0 <= idx < len(models):
+                    filepath = f"./ml_models/{models[idx]}.pkl"
+                    s.model = load_model(filepath)
+                    print(f"Model '{models[idx]}' loaded successfully!")
+                else:
+                    print("!Invalid selection!")
+            except ValueError:
+                print("!Invalid input!")
+            pause()
+        
+        elif choice == 2:
+            models = list_saved_models()
+            if not models:
+                print("!No saved models!")
+            else:
+                print("\nSaved models: ")
+                for name in models:
+                    print(f" - {name}")
+                    pause()
+
+        elif choice == 3:
+            models = list_saved_models()
+            if not models:
+                print("!No saved models!")
+                pause()
+                continue
+
+            name = input("Enter model name to delete: ").strip()
+            if name in models:
+                confim = ask_yes_no(f"Delete model '{name}' (y/n)")
+                if confim:
+                    delete_model(f"./ml_models/{name}.pkl")
+                    print("Model deleted.")
+                else:
+                    print("Cancelled.")
+            else:
+                print("!Model not found!")
+                pause()
+        
+        else:
+            return
+
+        
 def menu_data(s: AppState) -> None:
     """
     Menu for interacting with data loading functions, manually or from a file, viewing the contents 
