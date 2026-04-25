@@ -46,3 +46,37 @@ Thumbs.db
 .envrc
 
 idea.txt
+
+# Model and data files (should not be in repository)
+ml_models/
+*.pkl
+*.pickle
+*.joblib
+*.h5
+*.model
+*.pth
+*.pt
+*.onnx
+*.pkl.gz
+
+# Data files
+*.csv
+*.xlsx
+*.xls
+*.json
+data/
+datasets/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# macOS specific
+.AppleDouble
+.LSOverride
+
+# Temporary files
+*.tmp
+*.temp
+*~
+.~*
