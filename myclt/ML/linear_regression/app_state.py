@@ -16,6 +16,12 @@ class AppState:
     learning_rate: float = 0.05
     epochs: int = 2000
     
+    # Regularization parameters
+    use_l1: bool = False
+    use_l2: bool = False
+    lambda_l1: float = 0.01
+    lambda_l2: float = 0.01
+    
     # split data (after features/target chosen)
     X_train: Optional[np.ndarray] = None
     X_test: Optional[np.ndarray] = None
@@ -40,11 +46,22 @@ def print_status(s: AppState) -> None:
     trained = "no" if s.model is None else "yes"
     metrics = "none" if s.last_rmse is None else f"RMSE={s.last_rmse:.4f} | R2={s.last_r2:.4f}"
     
+    # Regularization status
+    reg_status = "OFF"
+    if s.use_l1 or s.use_l2:
+        reg_parts = []
+        if s.use_l1:
+            reg_parts.append(f"L1(λ={s.lambda_l1})")
+        if s.use_l2:
+            reg_parts.append(f"L2(λ={s.lambda_l2})")
+        reg_status = " + ".join(reg_parts)
+    
     print(f"Dataset: {ds}")
     print(f"Selection: {sup}")
     print(f"Split: test_size = {s.test_size}; seed =  {s.seed}")
     print(f"Scaling: {'ON' if s.use_scaling else 'OFF'}")
     print(f"Model: trained = {trained} (lr = {s.learning_rate} , epochs = {s.epochs})")
+    print(f"Regularization: {reg_status}")
     print(f"Metrics: {metrics}")
     print("=" * 72)
 
