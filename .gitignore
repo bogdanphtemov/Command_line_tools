@@ -60,7 +60,6 @@ ml_models/
 *.pkl.gz
 
 # Data files
-*.csv
 *.xlsx
 *.xls
 *.json

@@ -7,102 +7,167 @@ from .metrics import mse , rmse , r2_score
 from .visualization import plot_loss_curve , plot_true_vs_pred , plot_1d_regression
 from .core import LinearRegressionGD
 from .hyperparameter_tuning import grid_search_regularization
+from .session_adapter import LinearRegressionSessionAdapter
 from common.input_validation import ask_choice , ask_int , ask_float , ask_yes_no
 from common.ui_helpers import clear_screen , print_header , pause
-from ML.model_storage import save_model , load_model , list_saved_models , delete_model
+from ML.session_storage import SessionStorage
 
 def menu_save_load(s: AppState) -> None:
+    """
+    Save/Load complete ML sessions with:
+      - Raw dataset (stored once, no duplication)
+      - Feature/target selection
+      - Split indices + train/test data
+      - Trained model with all parameters
+      - Hyperparameters (algorithm-specific)
+      - Evaluation metrics
+      - Preprocessing state (scaling params)
+    
+    Format: JSON + NPZ (safe, efficient, no pickle)
+    """
+    # Initialize storage and adapter
+    storage = SessionStorage()
+    adapter = LinearRegressionSessionAdapter()
+    
     while True:
         clear_screen()
-        print_header("Linear Regression Tool — Save/Load")
+        print_header("Linear Regression Tool — Save/Load Session")
         print_status(s)
 
         options = [
-            "Save trained model",
-            "Load model",
-            "List saved models",
-            "Delete model",
+            "Save complete session",
+            "Load session",
+            "List saved sessions",
+            "Delete session",
             "Back",
         ]
 
         choice = ask_choice("" , options)
 
         if choice == 0:
-            if s.model is None:
-                print("!Model not loaded!")
+            # SAVE SESSION
+            if s.dataset is None:
+                print("!No dataset loaded!")
+                pause()
+                continue
+            
+            if s.prepareddata is None:
+                print("!Features/target not selected!")
                 pause()
                 continue
 
-            if not s.model.is_trained:
-                print("!Model is not trained yet!")
+            if s.model is None or not s.model.is_trained:
+                print("!Model not trained yet!")
                 pause()
                 continue
 
-            name = input("Enter model name (e.g. , 'my_lr_model'): ").strip()
-            if not name:
+            session_name = input("Enter session name (e.g., 'housing_v1'): ").strip()
+            if not session_name:
                 print("!Invalid name!")
                 pause()
                 continue
 
             try:
-                filepath = f"./ml_models/{name}.pkl"
-                save_model(s.model , filepath)
-                print(f"Model '{name}' saved successfully.")
+                # Extract session data using adapter
+                session_data, arrays_dict = adapter.extract(s)
+                
+                # Save session
+                session_dir = f"./ml_sessions/{session_name}"
+                storage.save_session(session_data, session_dir, arrays_dict, verbose=True)
+                
+                print(f"\n✓ Complete session '{session_name}' saved successfully!")
+                print(f"  - Dataset: {s.dataset.data.shape}")
+                print(f"  - Features: {len(s.prepareddata.feature_names)}")
+                print(f"  - Model: trained")
+                if s.last_rmse is not None:
+                    print(f"  - Metrics: RMSE={s.last_rmse:.4f}, R²={s.last_r2:.4f}")
+            
             except Exception as e:
-                print(f"!Error: {e}!")
+                print(f"!Error saving session: {e}!")
+            
             pause()
 
         elif choice == 1:
-            models = list_saved_models()
-            if not models:
-                print("!No saved models!")
+            # LOAD SESSION
+            sessions = storage.list_sessions()
+            if not sessions:
+                print("!No saved sessions!")
                 pause()
                 continue
 
-            print("\nAvailable models:")
-            for i , model_name in enumerate(models , 1):
-                print(f"{i}. {model_name}")
+            print("\nAvailable sessions:")
+            for i, session_name in enumerate(sessions, 1):
+                print(f"{i}. {session_name}")
             
             try:
-                idx = int(input("Select model number: ")) - 1
-                if 0 <= idx < len(models):
-                    filepath = f"./ml_models/{models[idx]}.pkl"
-                    s.model = load_model(filepath)
-                    print(f"Model '{models[idx]}' loaded successfully.")
+                idx = int(input("Select session number: ")) - 1
+                if 0 <= idx < len(sessions):
+                    session_dir = f"./ml_sessions/{sessions[idx]}"
+                    
+                    # Load session
+                    session_data, arrays_dict = storage.load_session(session_dir, verbose=True)
+                    
+                    # Restore state using adapter
+                    adapter.restore(session_data, arrays_dict, s)
+                    
+                    # Recreate model with loaded params
+                    s.model = LinearRegressionGD()
+                    
+                    print(f"\n✓ Session '{sessions[idx]}' loaded successfully!")
+                    print(f"  - Dataset: {s.dataset.data.shape}")
+                    print(f"  - Features: {len(s.prepareddata.feature_names)}")
+                    print(f"  - Model: Ready for predictions")
+                    if s.last_rmse is not None:
+                        print(f"  - Metrics: RMSE={s.last_rmse:.4f}, R²={s.last_r2:.4f}")
                 else:
                     print("!Invalid selection!")
-            except ValueError:
-                print("!Invalid input!")
+            
+            except ValueError as e:
+                print(f"!Invalid input: {e}!")
+            except Exception as e:
+                print(f"!Error loading session: {e}!")
+            
             pause()
         
         elif choice == 2:
-            models = list_saved_models()
-            if not models:
-                print("!No saved models!")
+            # LIST SESSIONS
+            sessions = storage.list_sessions()
+            if not sessions:
+                print("!No saved sessions!")
             else:
-                print("\nSaved models: ")
-                for name in models:
-                    print(f" - {name}")
-                    pause()
+                print("\nSaved sessions: ")
+                for name in sessions:
+                    session_dir = f"./ml_sessions/{name}"
+                    try:
+                        _, arrays = storage.load_session(session_dir, verbose=False)
+                        dataset_shape = arrays["dataset"].shape
+                        print(f" ✓ {name} (dataset: {dataset_shape})")
+                    except:
+                        print(f" ? {name} (corrupted)")
+            
+            pause()
 
         elif choice == 3:
-            models = list_saved_models()
-            if not models:
-                print("!No saved models!")
+            # DELETE SESSION
+            sessions = storage.list_sessions()
+            if not sessions:
+                print("!No saved sessions!")
                 pause()
                 continue
 
-            name = input("Enter model name to delete: ").strip()
-            if name in models:
-                confim = ask_yes_no(f"Delete model '{name}' (y/n)")
-                if confim:
-                    delete_model(f"./ml_models/{name}.pkl")
-                    print("Model deleted.")
+            session_name = input("Enter session name to delete: ").strip()
+            if session_name in sessions:
+                confirm = ask_yes_no(f"Delete session '{session_name}'? (y/n): ")
+                if confirm:
+                    session_dir = f"./ml_sessions/{session_name}"
+                    storage.delete_session(session_dir, verbose=True)
+                    print("Session deleted.")
                 else:
                     print("Cancelled.")
             else:
-                print("!Model not found!")
-                pause()
+                print("!Session not found!")
+            
+            pause()
         
         else:
             return
