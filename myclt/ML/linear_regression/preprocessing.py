@@ -1,7 +1,7 @@
 import numpy as np 
 from typing import Tuple 
 
-def train_test_split(X: np.ndarray, y: np.ndarray, test_size: float, seed:int) -> Tuple[np.ndarray , np.ndarray , np.ndarray , np.ndarray]:
+def train_test_split(X: np.ndarray, y: np.ndarray, test_size: float, seed:int) -> Tuple[np.ndarray , np.ndarray , np.ndarray , np.ndarray, np.ndarray, np.ndarray]:
 
     """
     Random split with fixed seed for reproducibility.
@@ -32,7 +32,8 @@ def train_test_split(X: np.ndarray, y: np.ndarray, test_size: float, seed:int) -
     X_test = X[test_idx]
     y_test = y[test_idx]
 
-    return X_train , X_test , y_train , y_test
+    # Return indices as well so callers can persist/reconstruct splits reliably
+    return X_train , X_test , y_train , y_test , train_idx, test_idx
 
 def standardize_fit(X_train: np.ndarray) -> Tuple[np.ndarray , np.ndarray , np.ndarray]:
     """

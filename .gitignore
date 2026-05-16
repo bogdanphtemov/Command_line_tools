@@ -63,8 +63,16 @@ ml_models/
 *.xlsx
 *.xls
 *.json
+*.csv
 data/
 datasets/
+
+# ML Sessions and trained models (should not be committed)
+ml_sessions/
+
+# NumPy and data arrays
+*.npz
+*.npy
 
 # Jupyter
 .ipynb_checkpoints/

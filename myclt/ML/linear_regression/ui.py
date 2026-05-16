@@ -107,11 +107,8 @@ def menu_save_load(s: AppState) -> None:
                     # Load session
                     session_data, arrays_dict = storage.load_session(session_dir, verbose=True)
                     
-                    # Restore state using adapter
+                    # Restore state using adapter (adapter will recreate model)
                     adapter.restore(session_data, arrays_dict, s)
-                    
-                    # Recreate model with loaded params
-                    s.model = LinearRegressionGD()
                     
                     print(f"\n✓ Session '{sessions[idx]}' loaded successfully!")
                     print(f"  - Dataset: {s.dataset.data.shape}")
