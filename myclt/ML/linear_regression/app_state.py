@@ -27,6 +27,9 @@ class AppState:
     X_test: Optional[np.ndarray] = None
     y_train: Optional[np.ndarray] = None
     y_test: Optional[np.ndarray] = None
+    # indices of original prepared X used to build splits (filled by rebuild_split)
+    train_idx: Optional[np.ndarray] = None
+    test_idx: Optional[np.ndarray] = None
 
     # scaler params (train-fitted)
     scaler_mean: Optional[np.ndarray] = None
@@ -74,7 +77,7 @@ def rebuild_split(s: AppState) -> None:
     
     X , y = s.prepareddata.X , s.prepareddata.Y
 
-    X_train , X_test , y_train , y_test = train_test_split(X , y , test_size=s.test_size , seed = s.seed)
+    X_train , X_test , y_train , y_test , train_idx, test_idx = train_test_split(X , y , test_size=s.test_size , seed = s.seed)
 
     if s.use_scaling:
         X_train_scaled , mean , std = standardize_fit(X_train)
@@ -86,6 +89,8 @@ def rebuild_split(s: AppState) -> None:
         s.scaler_mean , s.scaled_std = None , None
 
     s.y_train , s.y_test = y_train , y_test
+    # persist raw split indices (indices refer to prepared X)
+    s.train_idx, s.test_idx = train_idx, test_idx
     # reset model+metrics because the data pipeline changed
     s.model = None
     s.last_mse = s.last_rmse = s.last_r2 = None

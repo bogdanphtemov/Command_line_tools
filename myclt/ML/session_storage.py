@@ -9,8 +9,8 @@ from abc import ABC, abstractmethod
 import platform
 import sys
 
-# Will be imported from linear_regression module
-from .linear_regression.data import Dataset, Prepareddata
+# Note: algorithm-specific types (Dataset / Prepareddata) are imported by adapters
+# to avoid circular imports. Do NOT import linear_regression.* at module top-level here.
 
 
 @dataclass
@@ -57,26 +57,26 @@ class SessionData:
     feature_names: List[str]
     target_name: str
     
-    # Split indices (efficient reconstruction)
-    train_indices: List[int]
-    test_indices: List[int]
-    
     # Preprocessing state
     use_scaling: bool
-    
+
     # Model info
     model_type: str
     model_trained: bool
-    
+
     # Training configuration
     training_config: TrainingConfig
-    
+
     # Evaluation metrics
     metrics: Dict[str, Optional[float]]
-    
+
     # Metadata
     metadata: SessionMetadata
-    
+
+    # Split indices (efficient reconstruction). Optional when full split arrays are saved instead.
+    train_indices: Optional[List[int]] = None
+    test_indices: Optional[List[int]] = None
+
     # Array indices for npz file
     # (dataset_data, X_data, Y_data, X_train, X_test, y_train, y_test, scaler_mean, scaler_std, model_params_arrays)
     arrays_keys: Dict[str, str] = field(default_factory=dict)
@@ -85,53 +85,44 @@ class SessionData:
 class SessionAdapter(ABC):
     """
     Abstract adapter for algorithm-specific session extraction/restoration.
-    
+
     Each algorithm implements this to handle its own AppState ↔ SessionData conversion.
     Storage system stays clean and algorithm-agnostic.
     """
-    
+
     @abstractmethod
-    def extract(self, app_state: Any) -> SessionData:
+    def extract(self, app_state: Any) -> Tuple[SessionData, Dict[str, np.ndarray]]:
         """
-        Extract SessionData from algorithm's AppState.
-        
-        Args:
-            app_state: Algorithm-specific state object
-            
+        Extract SessionData and numpy arrays dict from algorithm's AppState.
+
         Returns:
-            SessionData ready for saving
+            (SessionData, arrays_dict)
         """
         raise NotImplementedError()
-    
+
     @abstractmethod
-    def restore(self, session_data: SessionData, app_state: Any) -> None:
+    def restore(self, session_data: SessionData, arrays: Dict[str, np.ndarray], app_state: Any) -> None:
         """
-        Restore algorithm's AppState from SessionData.
-        
-        Args:
-            session_data: Loaded SessionData
-            app_state: Algorithm-specific state object to populate
+        Restore algorithm's AppState from SessionData and arrays.
         """
         raise NotImplementedError()
-    
+
     def validate_session(self, session_data: SessionData) -> bool:
         """
         Validate session data integrity.
         Override in subclass for algorithm-specific checks.
-        
+
         Returns:
             True if valid, raises ValueError if not
         """
-        # Generic checks
-        if session_data.train_indices is None or session_data.test_indices is None:
-            raise ValueError("!Missing split indices!")
-        
+        # Generic checks: feature/target selection must exist.
         if not session_data.feature_names:
             raise ValueError("!No features selected!")
-        
+
         if session_data.target_name is None:
             raise ValueError("!No target selected!")
-        
+
+        # Note: split indices may be omitted when arrays (X_train/X_test) were saved instead.
         return True
 
 
@@ -161,31 +152,17 @@ class SessionStorage:
     
     def _validate_arrays(self, arrays_dict: Dict[str, np.ndarray]) -> None:
         """Verify data integrity after loading"""
-        dataset = arrays_dict.get("dataset")
-        if dataset is None:
-            raise ValueError("!Missing dataset array!")
-        
+        # Require prepared features and targets to be present (adapter responsibility)
         X_data = arrays_dict.get("X")
         Y_data = arrays_dict.get("Y")
-        
-        if X_data is not None and Y_data is not None:
-            if X_data.shape[0] != Y_data.shape[0]:
-                raise ValueError(
-                    f"Shape mismatch: X has {X_data.shape[0]} samples, "
-                    f"Y has {Y_data.shape[0]} samples!"
-                )
-        
-        # Check split arrays if present
-        X_train = arrays_dict.get("X_train")
-        X_test = arrays_dict.get("X_test")
-        y_train = arrays_dict.get("y_train")
-        y_test = arrays_dict.get("y_test")
-        
-        if all([X_train is not None, X_test is not None, y_train is not None, y_test is not None]):
-            if X_train.shape[0] != y_train.shape[0]:
-                raise ValueError("!X_train/y_train shape mismatch!")
-            if X_test.shape[0] != y_test.shape[0]:
-                raise ValueError("!X_test/y_test shape mismatch!")
+
+        if X_data is None or Y_data is None:
+            raise ValueError("!Missing required arrays: 'X' and 'Y' must be present in data.npz!")
+
+        if X_data.shape[0] != Y_data.shape[0]:
+            raise ValueError(
+                f"Shape mismatch: X has {X_data.shape[0]} samples, Y has {Y_data.shape[0]} samples!"
+            )
     
     def save_session(
         self,
@@ -301,6 +278,20 @@ class SessionStorage:
                 training_config=training_config,
                 **config_dict
             )
+            # Validate indices are within bounds for X (prepared features)
+            X_arr = arrays_dict.get("X")
+            if X_arr is not None:
+                n_samples = int(X_arr.shape[0])
+                all_indices = []
+                if session_data.train_indices:
+                    all_indices.extend(session_data.train_indices)
+                if session_data.test_indices:
+                    all_indices.extend(session_data.test_indices)
+                for idx in all_indices:
+                    if idx is None:
+                        raise ValueError("!Found None in split indices!")
+                    if not (0 <= int(idx) < n_samples):
+                        raise ValueError(f"!Index {idx} out of range for X with {n_samples} samples!")
             
             if verbose:
                 print(f"✓ Session loaded from {session_dir}/")
