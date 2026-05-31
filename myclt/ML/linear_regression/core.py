@@ -46,8 +46,8 @@ class LinearRegressionGD:
             # L1 regularization penalty: λ₁ × Σ|w|
             l1_penalty = self.lambda_l1 * np.sum(np.abs(self.w))
             
-            # L2 regularization penalty: λ₂ × Σ(w²)
-            l2_penalty = self.lambda_l2 * np.sum(self.w ** 2)
+            # L2 regularization penalty: (λ₂/2) × Σ(w²)
+            l2_penalty = (self.lambda_l2 / 2) * np.sum(self.w ** 2)
             
             # Total loss: MSE + L1 + L2
             loss = mse_loss + l1_penalty + l2_penalty
@@ -60,9 +60,9 @@ class LinearRegressionGD:
             if self.lambda_l1 > 0:
                 dw += self.lambda_l1 * np.sign(self.w)
             
-            # Add L2 gradient penalty: 2 × λ₂ × w
+            # Add L2 gradient penalty: λ₂ × w
             if self.lambda_l2 > 0:
-                dw += 2 * self.lambda_l2 * self.w
+                dw += self.lambda_l2 * self.w
             
             db = (2.0 / n_samples) * float(np.sum(errors))
 
@@ -102,7 +102,7 @@ class LinearRegressionGD:
             
             mse_loss = float(np.mean(errors ** 2))
             l1_penalty = self.lambda_l1 * np.sum(np.abs(self.w))
-            l2_penalty = self.lambda_l2 * np.sum(self.w ** 2)
+            l2_penalty = (self.lambda_l2 / 2) * np.sum(self.w ** 2)
             train_loss = mse_loss + l1_penalty + l2_penalty
             
             self.loss_history.append(train_loss)
@@ -111,7 +111,7 @@ class LinearRegressionGD:
             if self.lambda_l1 > 0:
                 dw += self.lambda_l1 * np.sign(self.w)
             if self.lambda_l2 > 0:
-                dw += 2 * self.lambda_l2 * self.w
+                dw += self.lambda_l2 * self.w
             
             db = (2.0 / n_samples) * float(np.sum(errors))
             self.w -= self.learning_rate * dw
@@ -123,7 +123,7 @@ class LinearRegressionGD:
             
             val_mse = float(np.mean(val_errors ** 2))
             val_l1 = self.lambda_l1 * np.sum(np.abs(self.w))
-            val_l2 = self.lambda_l2 * np.sum(self.w ** 2)
+            val_l2 = (self.lambda_l2 / 2) * np.sum(self.w ** 2)
             val_loss = val_mse + val_l1 + val_l2
             
             # ===== EARLY STOPPING =====

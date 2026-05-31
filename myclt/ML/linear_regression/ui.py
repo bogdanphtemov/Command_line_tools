@@ -79,8 +79,9 @@ def menu_save_load(s: AppState) -> None:
                 print(f"  - Dataset: {s.dataset.data.shape}")
                 print(f"  - Features: {len(s.prepareddata.feature_names)}")
                 print(f"  - Model: trained")
-                if s.last_rmse is not None:
-                    print(f"  - Metrics: RMSE={s.last_rmse:.4f}, R²={s.last_r2:.4f}")
+                if s.metrics:
+                    metrics_str = ", ".join(f"{k}={v:.4f}" for k, v in s.metrics.items())
+                    print(f"  - Metrics: {metrics_str}")
             
             except Exception as e:
                 print(f"!Error saving session: {e}!")
@@ -114,8 +115,9 @@ def menu_save_load(s: AppState) -> None:
                     print(f"  - Dataset: {s.dataset.data.shape}")
                     print(f"  - Features: {len(s.prepareddata.feature_names)}")
                     print(f"  - Model: Ready for predictions")
-                    if s.last_rmse is not None:
-                        print(f"  - Metrics: RMSE={s.last_rmse:.4f}, R²={s.last_r2:.4f}")
+                    if s.metrics:
+                        metrics_str = ", ".join(f"{k}={v:.4f}" for k, v in s.metrics.items())
+                        print(f"  - Metrics: {metrics_str}")
                 else:
                     print("!Invalid selection!")
             
@@ -197,7 +199,7 @@ def menu_data(s: AppState) -> None:
                 s.dataset = load_csv_dataset(path , delimiter= ";")  
                 s.prepareddata = None
                 s.model = None
-                s.last_mse = s.last_rmse = s.last_r2 = None
+                s.metrics.clear()
                 print("Dataset loaded successfully.")
             except Exception as e:
                 print(f"!Error: {e}!")
@@ -208,7 +210,7 @@ def menu_data(s: AppState) -> None:
                 s.dataset = manual_input_dataset()
                 s.prepareddata = None
                 s.model = None
-                s.last_mse = s.last_rmse = s.last_r2 = None
+                s.metrics.clear()
                 print("Dataset loaded successfully.")
             except Exception as e:
                 print(f"!Error: {e}!")
@@ -415,6 +417,9 @@ def menu_train(s: AppState) -> None:
                 pause()
                 continue
             
+            # Ask about early stopping
+            use_early_stopping = ask_yes_no("Use early stopping?", default=False)
+            
             # Create model with regularization parameters
             model = LinearRegressionGD(
                 learning_rate=s.learning_rate , 
@@ -422,16 +427,32 @@ def menu_train(s: AppState) -> None:
                 lambda_l1=s.lambda_l1 if s.use_l1 else 0.0,
                 lambda_l2=s.lambda_l2 if s.use_l2 else 0.0
             )
-            model.fit(s.X_train , s.y_train)
+            
+            if use_early_stopping:
+                # Split training data into train/validation for early stopping
+                n_train = len(s.X_train)
+                val_size = int(0.2 * n_train)
+                X_train_part = s.X_train[val_size:]
+                y_train_part = s.y_train[val_size:]
+                X_val = s.X_train[:val_size]
+                y_val = s.y_train[:val_size]
+                patience = ask_int("Patience (epochs without improvement):", min_val=5, max_val=200, default=50)
+                
+                print(f"\nTraining with early stopping (patience={patience})...")
+                model.fit_with_early_stopping(X_train_part, y_train_part, X_val, y_val, patience=patience, verbose=True)
+            else:
+                print("\nTraining without early stopping...")
+                model.fit(s.X_train , s.y_train)
 
             s.model = model
 
-            s.last_mse = s.last_rmse = s.last_r2 = None
+            s.metrics.clear()
 
             final_loss = model.loss_history[-1] if model.loss_history else None
 
             if final_loss is not None:
-                print(f"Training finished. Final train loss: {final_loss:.6f}")
+                print(f"\nTraining finished. Final train loss: {final_loss:.6f}")
+                print(f"Total epochs trained: {len(model.loss_history)}")
             else:
                 print("Training finished.")
             pause()
@@ -465,14 +486,14 @@ def menu_evaluate(s: AppState) -> None:
                 continue
 
             y_pred = s.model.predict(s.X_test)
-            s.last_mse = mse(s.y_test , y_pred)
-            s.last_rmse = rmse(s.y_test , y_pred)
-            s.last_r2 = r2_score(s.y_test , y_pred)
+            s.metrics['mse'] = mse(s.y_test , y_pred)
+            s.metrics['rmse'] = rmse(s.y_test , y_pred)
+            s.metrics['r2'] = r2_score(s.y_test , y_pred)
 
             print("\nTest metrics:")
-            print(f"MSE : {s.last_mse:.6f}")
-            print(f"RMSE : {s.last_rmse:.6f}")
-            print(f"R^2 : {s.last_r2:.6f}")
+            print(f"MSE : {s.metrics['mse']:.6f}")
+            print(f"RMSE : {s.metrics['rmse']:.6f}")
+            print(f"R^2 : {s.metrics['r2']:.6f}")
             pause()
         
         elif choice == 1:
@@ -574,7 +595,7 @@ def menu_visualize(s: AppState) -> None:
                 continue
                 
             x_raw = s.prepareddata.X[: , 0]
-            y_true = s.prepareddata.Y
+            y_true = s.prepareddata.y
           
             plot_1d_regression(
                 x_raw=x_raw,

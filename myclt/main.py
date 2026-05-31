@@ -2,6 +2,7 @@ import os
 import subprocess
 
 from ML.linear_regression.cli import main as run_linear_regression
+from ML.logistic_regression.cli import main as run_logistic_regression
 
 MENU_STRUCTURE = {
     "Systemic" : {
@@ -12,7 +13,8 @@ MENU_STRUCTURE = {
 
     },
     "ML" : {
-        "Linear Regression Model for Forecasting Continuous Values" : run_linear_regression
+        "Linear Regression Model for Forecasting Continuous Values" : run_linear_regression,
+        "Logistic Regression Model for Binary Classification" : run_logistic_regression
     }
 }    
 

@@ -1,5 +1,5 @@
 """
-Data loading and preparation for Linear Regression.
+Data loading and preparation for Logistic Regression.
 
 Reuses base data structures from ML.base.base_data for consistency
 across all ML algorithms.
