@@ -4,34 +4,7 @@ from typing import List , Optional
 
 from .core import LinearRegressionGD
 from .preprocessing import standardize_apply
-
-# This function plots the model's training process — 
-# that is, how the error (loss) changed during training at each epoch
-def plot_loss_curve(history: List[float]) -> None:
-    plt.figure()
-    plt.plot(np.arange(1 , len(history) + 1) , history)
-    plt.xlabel("Epoch")
-    plt.ylabel("MSE Loss")
-    plt.title("Training Loss Curve")
-    plt.grid(True)
-    plt.show()
-    
-
-def plot_true_vs_pred(y_true: np.ndarray , y_pred: np.ndarray , title: str = "True vs Predicted") -> None:
-    
-    plt.figure()
-    plt.scatter(y_true , y_pred)
-    
-    mn = min(float(y_true.min()) , float(y_pred.min()))
-    mx = max(float(y_true.max()) , float(y_pred.max()))
-
-    plt.plot([mn , mx] , [mn , mx])
-
-    plt.xlabel("y_true")
-    plt.ylabel("y_pred")
-    plt.title(title)
-    plt.grid(True)
-    plt.show()
+from ..visualization_utils import plot_loss_curve, plot_true_vs_pred
 
 def plot_1d_regression(x_raw: np.ndarray , y_true: np.ndarray , model: LinearRegressionGD , scaler_mean: Optional[np.ndarray] , scaler_std: Optional[np.ndarray],) -> None:
     """

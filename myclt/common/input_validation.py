@@ -22,10 +22,19 @@ def ask_choice(prompt: str , choices: List[str]) -> int:
         print("!Invalid choice! Try again...\n")
 
 # function for inputting integer parameters
-def ask_int(prompt: str, min_val: Optional[int] = None , max_val: Optional[int] = None) -> int:
+def ask_int(prompt: str, min_val: Optional[int] = None, max_val: Optional[int] = None, default: Optional[int] = None) -> int:
     while True:
 
-        raw = input(prompt).strip()
+        if default is not None:
+            display_prompt = f"{prompt} (default {default}): "
+        else:
+            display_prompt = f"{prompt}: "
+        
+        raw = input(display_prompt).strip()
+
+        # Use default if empty input
+        if raw == "" and default is not None:
+            return default
 
         try :
 
@@ -41,11 +50,20 @@ def ask_int(prompt: str, min_val: Optional[int] = None , max_val: Optional[int] 
         except ValueError:
             print("!Please enter the data type: Integer")
 
-# function for inputting flout parameters
-def ask_float(prompt: str , min_val: Optional[float] = None , max_val: Optional[float] = None) -> float:
+# function for inputting float parameters
+def ask_float(prompt: str, min_val: Optional[float] = None, max_val: Optional[float] = None, default: Optional[float] = None) -> float:
     while True:
 
-        raw = input(prompt).strip()
+        if default is not None:
+            display_prompt = f"{prompt} (default {default}): "
+        else:
+            display_prompt = f"{prompt}: "
+        
+        raw = input(display_prompt).strip()
+
+        # Use default if empty input
+        if raw == "" and default is not None:
+            return default
 
         try:
 
@@ -62,10 +80,20 @@ def ask_float(prompt: str , min_val: Optional[float] = None , max_val: Optional[
             print("!Please enter the data type: Float")
 
 # check user decisions
-def ask_yes_no(prompt: str) -> bool:
+def ask_yes_no(prompt: str, default: Optional[bool] = None) -> bool:
     while True:
         
-        raw = input(prompt).strip().lower()
+        if default is not None:
+            default_str = "Y/n" if default else "y/N"
+            display_prompt = f"{prompt} [{default_str}]: "
+        else:
+            display_prompt = f"{prompt} [y/n]: "
+        
+        raw = input(display_prompt).strip().lower()
+
+        # Use default if empty input
+        if raw == "" and default is not None:
+            return default
 
         if raw in ("y" , "yes"):
             return True

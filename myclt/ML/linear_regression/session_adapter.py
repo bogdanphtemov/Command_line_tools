@@ -130,11 +130,7 @@ class LinearRegressionSessionAdapter(SessionAdapter):
                     model_type="linear_regression",
                     model_trained=app_state.model.is_trained,
                     training_config=training_config,
-                    metrics={
-                        "mse": app_state.last_mse,
-                        "rmse": app_state.last_rmse,
-                        "r2": app_state.last_r2,
-                    },
+                    metrics=app_state.metrics if app_state.metrics else {},
                     metadata=metadata,
                     arrays_keys={"model_w": "model_w"} if model_params.get("w") is not None else {},
                 )
@@ -189,11 +185,7 @@ class LinearRegressionSessionAdapter(SessionAdapter):
             model_type="linear_regression",
             model_trained=app_state.model.is_trained,
             training_config=training_config,
-            metrics={
-                "mse": app_state.last_mse,
-                "rmse": app_state.last_rmse,
-                "r2": app_state.last_r2,
-            },
+            metrics=app_state.metrics if app_state.metrics else {},
             metadata=metadata,
             arrays_keys={"model_w": "model_w"} if model_params.get("w") is not None else {},
         )
@@ -279,9 +271,7 @@ class LinearRegressionSessionAdapter(SessionAdapter):
         app_state.lambda_l2 = hyperparams.get("lambda_l2", 0.01)
 
         # Metrics
-        app_state.last_mse = session_data.metrics.get("mse")
-        app_state.last_rmse = session_data.metrics.get("rmse")
-        app_state.last_r2 = session_data.metrics.get("r2")
+        app_state.metrics = session_data.metrics if session_data.metrics else {}
 
         # Restore model instance and params
         model_params = hyperparams.get("model_params", {})
