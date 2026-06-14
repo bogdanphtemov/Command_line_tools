@@ -8,7 +8,12 @@ only dispatches the top-level menu.
 from common.input_validation import ask_choice
 from common.ui_helpers import clear_screen, print_header
 from .app_state import AppState, print_status
-from .ui import menu_data, menu_train, menu_evaluate, menu_predict, menu_visualize
+from .ui import menu_data, menu_train, menu_evaluate, menu_predict, menu_visualize, menu_save_load
+from .core import LogisticRegressionGD
+
+from ..model_storage import register_model
+
+register_model("logistic_regression", LogisticRegressionGD)
 
 
 def main() -> None:
@@ -25,6 +30,7 @@ def main() -> None:
             "Evaluate",
             "Predict",
             "Visualize",
+            "Save/Load",
             "Exit",
         ]
 
@@ -40,6 +46,8 @@ def main() -> None:
             menu_predict(state)
         elif choice == 4:
             menu_visualize(state)
+        elif choice == 5:
+            menu_save_load(state)
         else:
             return
 

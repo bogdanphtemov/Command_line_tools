@@ -1,6 +1,95 @@
 import numpy as np
-from typing import Dict , Any, Callable, Optional
+from typing import Dict , Any, Callable, Optional, Tuple
 from abc import ABC , abstractmethod
+
+
+# ============================================================================
+# Universal preprocessing functions (shared by all supervised models)
+# ============================================================================
+
+def train_test_split(X: np.ndarray, y: np.ndarray, test_size: float, seed: int) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Random split with fixed seed for reproducibility.
+    This is a standard practice in machine learning 
+    that helps detect overfitting of the model.
+    
+    Args:
+        X: Feature matrix (n_samples, n_features)
+        y: Target vector (n_samples,)
+        test_size: Proportion of data for test set (0.05-0.5)
+        seed: Random seed for reproducibility
+    
+    Returns:
+        Tuple of (X_train, X_test, y_train, y_test, train_idx, test_idx)
+    """
+    if not(0.05 <= test_size <= 0.5):
+        raise ValueError("!test_size should be between 0.05 and 0.5 for this tool!")
+    
+    # we take the number of examples
+    n = X.shape[0]
+    
+    # creating a random number generator with a fixed code for reproducibility of results
+    rng = np.random.RandomState(seed)
+    
+    # randomize indices
+    idx = np.arange(n)
+    rng.shuffle(idx)
+
+    test_n = int(round(n * test_size))
+    test_idx = idx[:test_n]
+
+    train_idx = idx[test_n:]
+
+    X_train = X[train_idx]
+    y_train = y[train_idx]
+
+    X_test = X[test_idx]
+    y_test = y[test_idx]
+
+    # Return indices as well so callers can persist/reconstruct splits reliably
+    return X_train, X_test, y_train, y_test, train_idx, test_idx
+
+
+def standardize_fit(X_train: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Fit standardization on TRAIN only:
+    mean, std per feature.
+    Returns scaled X_train + mean + std.
+    
+    Args:
+        X_train: Training feature matrix (n_train_samples, n_features)
+    
+    Returns:
+        Tuple of (X_scaled, mean, std_safe) where std_safe has 1.0 for zero-std features
+    """
+    mean = X_train.mean(axis=0)
+    std = X_train.std(axis=0)
+
+    # division by zero protection
+    std_safe = np.where(std == 0.0, 1.0, std)
+    X_scaled = (X_train - mean) / std_safe
+
+    return X_scaled, mean, std_safe
+
+
+def standardize_apply(X: np.ndarray, mean: np.ndarray, std: np.ndarray) -> np.ndarray:
+    """
+    Apply fitted standardization to new data.
+    
+    Args:
+        X: Feature matrix to scale (n_samples, n_features)
+        mean: Mean from training data (n_features,)
+        std: Standard deviation from training data (n_features,)
+    
+    Returns:
+        Scaled feature matrix (n_samples, n_features)
+    """
+    return (X - mean) / std
+
+
+# ============================================================================
+# Base classes for ML models
+# ============================================================================
 
 class BaseModel(ABC):
     """
