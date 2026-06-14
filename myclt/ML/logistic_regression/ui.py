@@ -8,13 +8,17 @@ import numpy as np
 from typing import List, Tuple
 
 from .app_state import AppState, print_status, rebuild_split
-from .data import Dataset, Prepareddata, load_csv_dataset
+from .data import Dataset, Prepareddata, load_csv_dataset, manual_input_dataset
 from .core import LogisticRegressionGD
+from .preprocessing import standardize_apply
 from .metrics import accuracy, precision, recall, f1_score, confusion_matrix, print_classification_report
 from .visualization import (
     plot_loss_curve, plot_confusion_matrix_heatmap, plot_feature_coefficients,
-    plot_probability_distribution, plot_metrics_comparison
+    plot_probability_distribution, plot_metrics_comparison, plot_roc_curve,
+    plot_1d_logistic_regression
 )
+from .session_adapter import LogisticRegressionSessionAdapter
+from ML.session_storage import SessionStorage
 from common.input_validation import ask_yes_no, ask_int, ask_float, ask_choice
 from common.ui_helpers import clear_screen, print_header, pause
 
@@ -179,7 +183,7 @@ def load_data_interactive(s: AppState) -> None:
     print("=" * 70)
     
     print("\n1. Load from CSV file")
-    print("2. Manual input (placeholder)")
+    print("2. Manual input")
     
     choice = ask_choice("", ["Load CSV", "Manual input"])
     if choice == 0:
@@ -191,7 +195,11 @@ def load_data_interactive(s: AppState) -> None:
         except FileNotFoundError as e:
             print(f"✗ Error: {e}")
     else:
-        print("Manual input not yet implemented")
+        try:
+            s.dataset = manual_input_dataset()
+            print(f"✓ Created dataset: {s.dataset.data.shape[0]} rows × {s.dataset.data.shape[1]} columns")
+        except ValueError as e:
+            print(f"✗ Error: {e}")
 
 
 def select_features_interactive(s: AppState) -> None:
@@ -305,7 +313,6 @@ def predict_single_interactive(s: AppState) -> None:
     try:
         X_input = show_prediction_example(s.prepareddata.feature_names)
         if s.use_scaling and s.scaler_mean is not None:
-            from .preprocessing import standardize_apply
             X_input = standardize_apply(X_input.reshape(1, -1), s.scaler_mean, s.scaled_std)[0]
         proba = s.model.predict_proba(X_input.reshape(1, -1))[0]
         pred = s.model.predict(X_input.reshape(1, -1))[0]
@@ -327,7 +334,7 @@ def menu_data(s: AppState) -> None:
         print_status(s)
         options = [
             "Load CSV dataset",
-            "Manual input (placeholder)",
+            "Manual input",
             "Select features + target",
             "Configure train/test split",
             "Back",
@@ -344,7 +351,13 @@ def menu_data(s: AppState) -> None:
                 print(f"✗ Error: {e}")
             pause()
         elif choice == 1:
-            print("Manual input not yet implemented")
+            try:
+                s.dataset = manual_input_dataset()
+                s.prepareddata = None
+                s.model = None
+                print("Dataset created successfully.")
+            except Exception as e:
+                print(f"✗ Error: {e}")
             pause()
         elif choice == 2:
             if s.dataset is None:
@@ -402,16 +415,220 @@ def menu_evaluate(s: AppState) -> None:
         print_status(s)
         options = [
             "Evaluate on test set",
+            "Explain metrics",
             "Back",
         ]
         choice = ask_choice("", options)
         if choice == 0:
             evaluate_model_interactive(s)
             pause()
+        elif choice == 1:
+            clear_screen()
+            print_header("Logistic Regression — Metrics Explained")
+            print("\nACCURACY:")
+            print("─" * 70)
+            print("  • What: Percentage of all predictions that are correct")
+            print("  • Formula: Accuracy = (TP + TN) / (TP + TN + FP + FN)")
+            print("  • Range: 0 to 1 (or 0% to 100%)")
+            print("  • When to use: balanced classes, all errors equally important")
+            print("  • Pitfall: misleading if classes are imbalanced")
+            
+            print("\nPRECISION:")
+            print("─" * 70)
+            print("  • What: Of all positive predictions, how many are correct?")
+            print("  • Formula: Precision = TP / (TP + FP)")
+            print("  • Focus: False Positives (wrong positive predictions)")
+            print("  • When to use: minimize false alarms")
+            print("  • Example: spam filter (avoid marking good emails as spam)")
+            
+            print("\nRECALL (Sensitivity):")
+            print("─" * 70)
+            print("  • What: Of all actual positives, how many did we catch?")
+            print("  • Formula: Recall = TP / (TP + FN)")
+            print("  • Focus: False Negatives (missed positive cases)")
+            print("  • When to use: catch all positive cases")
+            print("  • Example: disease detection (avoid missing sick patients)")
+            
+            print("\nF1 SCORE:")
+            print("─" * 70)
+            print("  • What: Harmonic mean of precision and recall")
+            print("  • Formula: F1 = 2 × (Precision × Recall) / (Precision + Recall)")
+            print("  • Range: 0 to 1 (higher is better)")
+            print("  • When to use: balance between precision and recall needed")
+            print("  • Best for: imbalanced datasets where both metrics matter")
+            
+            print("\nQUICK GUIDE:")
+            print("─" * 70)
+            print("  • Imbalanced data? Use F1, Precision, and Recall")
+            print("  • Balanced data? Accuracy is meaningful")
+            print("  • Don't miss positives? Prioritize Recall")
+            print("  • Avoid false alarms? Prioritize Precision")
+            print("  • Overall balance? Use F1")
+            pause()
         else:
             return
 
 
+def menu_save_load(s: AppState) -> None:
+    """
+    Save/Load complete ML sessions with:
+      - Raw dataset (stored once, no duplication)
+      - Feature/target selection
+      - Split indices + train/test data
+      - Trained model with all parameters
+      - Hyperparameters (algorithm-specific)
+      - Evaluation metrics
+      - Preprocessing state (scaling params)
+    
+    Format: JSON + NPZ (safe, efficient, no pickle)
+    """
+    # Initialize storage and adapter
+    storage = SessionStorage()
+    adapter = LogisticRegressionSessionAdapter()
+    
+    while True:
+        clear_screen()
+        print_header("Logistic Regression Tool — Save/Load Session")
+        print_status(s)
+
+        options = [
+            "Save complete session",
+            "Load session",
+            "List saved sessions",
+            "Delete session",
+            "Back",
+        ]
+
+        choice = ask_choice("", options)
+
+        if choice == 0:
+            # SAVE SESSION
+            if s.dataset is None:
+                print("!No dataset loaded!")
+                pause()
+                continue
+            
+            if s.prepareddata is None:
+                print("!Features/target not selected!")
+                pause()
+                continue
+
+            if s.model is None or not s.model.is_trained:
+                print("!Model not trained yet!")
+                pause()
+                continue
+
+            session_name = input("Enter session name (e.g., 'iris_v1'): ").strip()
+            if not session_name:
+                print("!Invalid name!")
+                pause()
+                continue
+
+            try:
+                # Extract session data using adapter
+                session_data, arrays_dict = adapter.extract(s)
+                
+                # Save session
+                session_dir = f"./ml_sessions/{session_name}"
+                storage.save_session(session_data, session_dir, arrays_dict, verbose=True)
+                
+                print(f"\n✓ Complete session '{session_name}' saved successfully!")
+                print(f"  - Dataset: {s.dataset.data.shape}")
+                print(f"  - Features: {len(s.prepareddata.feature_names)}")
+                print(f"  - Model: trained")
+                if s.metrics:
+                    metrics_str = ", ".join(f"{k}={v:.4f}" for k, v in s.metrics.items())
+                    print(f"  - Metrics: {metrics_str}")
+            
+            except Exception as e:
+                print(f"!Error saving session: {e}!")
+            
+            pause()
+
+        elif choice == 1:
+            # LOAD SESSION
+            sessions = storage.list_sessions()
+            if not sessions:
+                print("!No saved sessions!")
+                pause()
+                continue
+
+            print("\nAvailable sessions:")
+            for i, session_name in enumerate(sessions, 1):
+                print(f"{i}. {session_name}")
+            
+            try:
+                idx = int(input("Select session number: ")) - 1
+                if 0 <= idx < len(sessions):
+                    session_dir = f"./ml_sessions/{sessions[idx]}"
+                    
+                    # Load session
+                    session_data, arrays_dict = storage.load_session(session_dir, verbose=True)
+                    
+                    # Restore state using adapter (adapter will recreate model)
+                    adapter.restore(session_data, arrays_dict, s)
+                    
+                    print(f"\n✓ Session '{sessions[idx]}' loaded successfully!")
+                    print(f"  - Dataset: {s.dataset.data.shape}")
+                    print(f"  - Features: {len(s.prepareddata.feature_names)}")
+                    print(f"  - Model: Ready for predictions")
+                    if s.metrics:
+                        metrics_str = ", ".join(f"{k}={v:.4f}" for k, v in s.metrics.items())
+                        print(f"  - Metrics: {metrics_str}")
+                else:
+                    print("!Invalid selection!")
+            
+            except ValueError as e:
+                print(f"!Invalid input: {e}!")
+            except Exception as e:
+                print(f"!Error loading session: {e}!")
+            
+            pause()
+        
+        elif choice == 2:
+            # LIST SESSIONS
+            sessions = storage.list_sessions()
+            if not sessions:
+                print("!No saved sessions!")
+            else:
+                print("\nSaved sessions: ")
+                for name in sessions:
+                    session_dir = f"./ml_sessions/{name}"
+                    try:
+                        _, arrays = storage.load_session(session_dir, verbose=False)
+                        dataset_shape = arrays["dataset"].shape
+                        print(f" ✓ {name} (dataset: {dataset_shape})")
+                    except:
+                        print(f" ? {name} (corrupted)")
+            
+            pause()
+
+        elif choice == 3:
+            # DELETE SESSION
+            sessions = storage.list_sessions()
+            if not sessions:
+                print("!No saved sessions!")
+                pause()
+                continue
+
+            session_name = input("Enter session name to delete: ").strip()
+            if session_name in sessions:
+                confirm = ask_yes_no(f"Delete session '{session_name}'? (y/n): ")
+                if confirm:
+                    session_dir = f"./ml_sessions/{session_name}"
+                    storage.delete_session(session_dir, verbose=True)
+                    print("Session deleted.")
+                else:
+                    print("Cancelled.")
+            else:
+                print("!Session not found!")
+            
+            pause()
+        
+        else:
+            return
+
+        
 def menu_predict(s: AppState) -> None:
     while True:
         clear_screen()
@@ -439,6 +656,8 @@ def menu_visualize(s: AppState) -> None:
             "Plot confusion matrix (test set)",
             "Plot feature coefficients",
             "Plot probability distribution",
+            "Plot ROC curve (test set)",
+            "Plot 1D logistic regression (single feature only)",
             "Back",
         ]
         choice = ask_choice("", options)
@@ -472,6 +691,35 @@ def menu_visualize(s: AppState) -> None:
                 continue
             y_proba = s.model.predict_proba(s.X_test)
             plot_probability_distribution(y_proba, s.y_test)
+            pause()
+        elif choice == 4:
+            if s.model is None or s.X_test is None or s.y_test is None:
+                print("✗ Need trained model and test set!")
+                pause()
+                continue
+            y_proba = s.model.predict_proba(s.X_test)
+            plot_roc_curve(s.y_test, y_proba)
+            pause()
+        elif choice == 5:
+            if s.model is None or s.prepareddata is None or s.X_test is None or s.y_test is None:
+                print("✗ Need trained model, features, and test set!")
+                pause()
+                continue
+            if len(s.prepareddata.feature_names) != 1:
+                print("✗ 1D plot requires exactly 1 feature!")
+                pause()
+                continue
+            
+            # Get raw feature data from test set using indices
+            x_test_raw = s.prepareddata.X[s.test_idx, :]
+            
+            plot_1d_logistic_regression(
+                x_raw=x_test_raw,
+                y_true=s.y_test,
+                model=s.model,
+                scaler_mean=s.scaler_mean,
+                scaler_std=s.scaled_std,
+            )
             pause()
         else:
             return

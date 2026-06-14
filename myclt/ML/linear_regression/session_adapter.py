@@ -1,6 +1,10 @@
 import numpy as np
 from typing import List, Dict, Any, Tuple
 from datetime import datetime
+from collections import defaultdict, deque
+from .data import Dataset, Prepareddata
+from .core import LinearRegressionGD
+from .preprocessing import standardize_apply
 
 from ML.session_storage import (
     SessionAdapter, SessionData, SessionMetadata, TrainingConfig
@@ -14,7 +18,6 @@ def _map_rows_to_indices(full: np.ndarray, subset: np.ndarray) -> List[int]:
     Complexity: O(n) to build the map + O(m) to assign indices for subset.
     Raises ValueError when a row cannot be matched.
     """
-    from collections import defaultdict, deque
 
     if full.ndim != 2 or subset.ndim != 2:
         raise ValueError("Expected 2D arrays for row mapping")
@@ -200,10 +203,6 @@ class LinearRegressionSessionAdapter(SessionAdapter):
         # Validate session structure
         self.validate_session(session_data)
 
-        # Lazy import to avoid circular imports
-        from .data import Dataset, Prepareddata
-        from .core import LinearRegressionGD
-
         # Restore dataset and prepared data
         dataset_array = arrays.get("dataset")
         if dataset_array is None:
@@ -235,7 +234,6 @@ class LinearRegressionSessionAdapter(SessionAdapter):
 
             # apply scaling if needed
             if session_data.use_scaling and getattr(app_state, "scaler_mean", None) is not None and getattr(app_state, "scaled_std", None) is not None:
-                from .preprocessing import standardize_apply
                 app_state.X_train = standardize_apply(X_train_raw, app_state.scaler_mean, app_state.scaled_std)
                 app_state.X_test = standardize_apply(X_test_raw, app_state.scaler_mean, app_state.scaled_std)
             else:
