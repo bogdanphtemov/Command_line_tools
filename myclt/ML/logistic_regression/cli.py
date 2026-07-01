@@ -11,10 +11,6 @@ from .app_state import AppState, print_status
 from .ui import menu_data, menu_train, menu_evaluate, menu_predict, menu_visualize, menu_save_load
 from .core import LogisticRegressionGD
 
-from ..model_storage import register_model
-
-register_model("logistic_regression", LogisticRegressionGD)
-
 
 def main() -> None:
     state = AppState()
