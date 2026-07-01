@@ -1,18 +1,20 @@
 import numpy as np 
-from typing import Optional , List , Dict , Any
+from typing import Optional, List, Dict, Any
 
-from ML.base_models import SupervisedModel
+from ML.base_models import SupervisedModel, BaseModel
 
-class LinearRegressionGD:
+
+class LinearRegressionGD(BaseModel, SupervisedModel):
     """
     y_hat = X @ w + b
     Batch Gradient Descent minimizing MSE.
     Supports L1 (Lasso) and L2 (Ridge) regularization.
     """
     model_type = "linear_regression"
+    
     # Initialize the class (model) constructor
-    def __init__(self , learning_rate: float = 0.05 , epochs: int = 2000 , 
-                 lambda_l1: float = 0.0 , lambda_l2: float = 0.0):
+    def __init__(self, learning_rate: float = 0.05, epochs: int = 2000, 
+                 lambda_l1: float = 0.0, lambda_l2: float = 0.0):
         self.learning_rate = learning_rate
         self.epochs = epochs
         self.lambda_l1 = lambda_l1  # L1 regularization strength (Lasso)
@@ -27,15 +29,15 @@ class LinearRegressionGD:
         return self.w is not None
 
     # model training method
-    def fit(self , X: np.ndarray , y: np.ndarray) -> None:
+    def fit(self, X: np.ndarray, y: np.ndarray) -> None:
         # Initializing initial weights
-        n_samples , n_features = X.shape
-        self.w = np.zeros(n_features , dtype=float)
+        n_samples, n_features = X.shape
+        self.w = np.zeros(n_features, dtype=float)
         self.b = 0.0 
         self.loss_history = []
         
         # model training cycle
-        for epoch in range(1 , self.epochs + 1):
+        for epoch in range(1, self.epochs + 1):
             # prediction and error detection
             y_pred = X @ self.w + self.b
             errors = y_pred - y
@@ -143,13 +145,13 @@ class LinearRegressionGD:
                 print(f"Epoch {epoch}: train_loss={train_loss:.6f}, val_loss={val_loss:.6f}")
             
     # method of making predictions         
-    def predict(self , X: np.ndarray) -> np.ndarray:
+    def predict(self, X: np.ndarray) -> np.ndarray:
         if self.w is None:
             raise RuntimeError("!Model is not trained yet!")
         
         return X @ self.w + self.b
     
-    def get_params(self) -> Dict[str , Any]:
+    def get_params(self) -> Dict[str, Any]:
         """
         Get parameters to save
         Includes weights, biases, and hyperparameters
@@ -165,12 +167,12 @@ class LinearRegressionGD:
         }
     
     # set parameters from downloaded data
-    def set_params(self , params: Dict[str , Any]) -> None:
+    def set_params(self, params: Dict[str, Any]) -> None:
         if params["w"] is not None:
-            self.w = np.array(params["w"] , dtype=float)
+            self.w = np.array(params["w"], dtype=float)
             self.b = params["b"]
             self.learning_rate = params["learning_rate"]
             self.epochs = params["epochs"]
-            self.lambda_l1 = params.get("lambda_l1" , 0.0)
-            self.lambda_l2 = params.get("lambda_l2" , 0.0)
-            self.loss_history = params.get("loss_history" , [])
+            self.lambda_l1 = params.get("lambda_l1", 0.0)
+            self.lambda_l2 = params.get("lambda_l2", 0.0)
+            self.loss_history = params.get("loss_history", [])
