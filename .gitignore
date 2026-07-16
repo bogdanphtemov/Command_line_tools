@@ -87,3 +87,6 @@ ml_sessions/
 *.temp
 *~
 .~*
+
+# Temporary directories
+tmp/

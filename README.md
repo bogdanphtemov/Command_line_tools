@@ -61,22 +61,35 @@ myclt/
 git clone https://github.com/bogdanphtemov/Command_line_tools.git
 cd Command_line_tools
 
-# Install dependencies
-pip install -r requirements.txt
+# [Recommended] Create and activate virtual environment
+python3 -m venv .venv
+source .venv/bin/activate   # Linux/macOS
+# .venv\Scripts\activate    # Windows
 
-# Install package in editable mode
-cd myclt
+# Install the project (will install all dependencies)
 pip install -e .
 ```
 
 ## 🎮 Usage
 
 ```bash
-cd myclt
-python main.py
-# or
-python3 main.py
+# From the project root (Command_line_tools)
+python -m myclt
+# or if you activated the virtual environment:
+# just: myclt
 ```
+
+> **Note:** `python -m myclt` працює з будь-якої папки після встановлення пакета.
+
+### Якщо ви не хочете встановлювати пакет:
+```bash
+# Достатньо запускати з кореня проекту:
+python -m myclt
+# або
+python3 -m myclt
+```
+
+> **Не потрібно** заходити всередину папки `myclt/`! Проект запускається з кореня.
 
 This launches an interactive menu where you can:
 1. Load and explore datasets

@@ -10,7 +10,7 @@ from typing import List, Dict, Any, Tuple, Optional
 from datetime import datetime
 from collections import defaultdict, deque
 
-from ML.session_storage import (
+from myclt.ML.session_storage import (
     SessionAdapter, SessionData, SessionMetadata, TrainingConfig
 )
 
