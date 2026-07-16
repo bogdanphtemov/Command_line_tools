@@ -1,16 +1,20 @@
 import os
 
-from ML.linear_regression.cli import main as run_linear_regression
-from ML.logistic_regression.cli import main as run_logistic_regression
-from ML.logistic_regression.cli_multinomial import main as run_multinomial_logistic_regression
-from legacy_code.cleaner import main as run_cleaner
-from legacy_code.project_creator import main as run_project_creator
+from myclt.ML.supervised_learning.linear_regression.cli import main as run_linear_regression
+from myclt.ML.supervised_learning.logistic_regression.cli import main as run_logistic_regression
+from myclt.ML.supervised_learning.logistic_regression.cli_multinomial import main as run_multinomial_logistic_regression
+from myclt.ML.supervised_learning.svm.cli import main as run_svm
+from myclt.ML.supervised_learning.svm.cli_multinomial import main as run_svm_multinomial
+from myclt.legacy_code.cleaner import main as run_cleaner
+from myclt.legacy_code.project_creator import main as run_project_creator
 
 MENU_STRUCTURE = {
     "Machine learning algorithms with a teacher": {
         "Linear Regression for Forecasting Continuous Values": run_linear_regression,
         "Logistic Regression for Binary Classification": run_logistic_regression,
         "Multinomial Logistic Regression for Multiclass Classification": run_multinomial_logistic_regression,
+        "Support Vector Machines (SVM) for Classification and Regression": run_svm,
+        "Multiclass SVM (One-vs-Rest)": run_svm_multinomial,
     },
     "Machine learning algorithms without a teacher": {},
     "Machine learning algorithms with reinforcement": {},
