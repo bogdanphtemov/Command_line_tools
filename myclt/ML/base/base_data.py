@@ -274,7 +274,7 @@ def select_features_and_target(ds: Dataset) -> Prepareddata:
     print("\nDefault FEATURES are all columns except target:")
     print(", ".join(cols[i] for i in default_feature_idxs))
 
-    if ask_yes_no("Do you want to manually choose feature columns? (y/n): "):
+    if ask_yes_no("Do you want to manually choose feature columns?"):
         raw = input("Features: ").strip()
         parts = [p.strip() for p in raw.split(",") if p.strip() != ""]
         idxs = []

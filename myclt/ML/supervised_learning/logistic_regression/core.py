@@ -140,11 +140,12 @@ class LogisticRegressionGD(BaseModel, SupervisedModel):
     
     def fit_with_early_stopping(self, X_train: np.ndarray, y_train: np.ndarray,
                                 X_val: np.ndarray, y_val: np.ndarray,
-                                patience: int = 50, verbose: bool = False) -> None:
+                                patience: int = 50, min_delta: float = 1e-6, verbose: bool = False) -> None:
         """
         Train with early stopping to prevent overfitting.
         
         Stops training if validation loss doesn't improve for 'patience' epochs.
+        Restores the best weights after stopping.
         
         Args:
             X_train, y_train: Training data
@@ -161,6 +162,8 @@ class LogisticRegressionGD(BaseModel, SupervisedModel):
         
         best_val_loss = float('inf')
         patience_counter = 0
+        best_w = None
+        best_b = 0.0
         
         for epoch in range(1, self.epochs + 1):
             # Training step
@@ -176,6 +179,15 @@ class LogisticRegressionGD(BaseModel, SupervisedModel):
             
             self.w -= self.learning_rate * dw
             self.b -= self.learning_rate * db
+
+            # ===== DIVERGENCE GUARD =====
+            if not np.all(np.isfinite(self.w)) or not np.isfinite(self.b):
+                if verbose:
+                    print(f"!Training diverged at epoch {epoch} (weights became NaN/inf)!")
+                if best_w is not None:
+                    self.w = best_w.copy()
+                    self.b = best_b
+                return
             
             # Validation step
             z_val = X_val @ self.w + self.b
@@ -189,9 +201,11 @@ class LogisticRegressionGD(BaseModel, SupervisedModel):
             self.loss_history.append(val_loss)
             
             # Early stopping check
-            if val_loss < best_val_loss:
+            if val_loss < best_val_loss - min_delta:
                 best_val_loss = val_loss
                 patience_counter = 0
+                best_w = self.w.copy()
+                best_b = self.b
             else:
                 patience_counter += 1
             
@@ -199,8 +213,12 @@ class LogisticRegressionGD(BaseModel, SupervisedModel):
                 print(f"Epoch {epoch}: Val Loss = {val_loss:.6f}")
             
             if patience_counter >= patience:
+                # Restore best weights
+                if best_w is not None:
+                    self.w = best_w.copy()
+                    self.b = best_b
                 if verbose:
-                    print(f"Early stopping at epoch {epoch}")
+                    print(f"Early stopping at epoch {epoch}, best val loss: {best_val_loss:.6f}")
                 break
     
     def get_params(self) -> Dict[str, Any]:
@@ -445,7 +463,7 @@ class MultinomialLogisticRegression(BaseModel, SupervisedModel):
     
     def fit_with_early_stopping(self, X_train: np.ndarray, y_train: np.ndarray,
                                 X_val: np.ndarray, y_val: np.ndarray,
-                                patience: int = 50, verbose: bool = False) -> None:
+                                patience: int = 50, min_delta: float = 1e-6, verbose: bool = False) -> None:
         """
         Train with early stopping to prevent overfitting.
         

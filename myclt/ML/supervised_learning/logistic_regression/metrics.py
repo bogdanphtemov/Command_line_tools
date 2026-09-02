@@ -12,6 +12,21 @@ from typing import Tuple, Optional
 # ============================================================================
 # Binary classification metrics (original)
 # ============================================================================
+def log_loss(y_true: np.ndarray, y_prob: np.ndarray) -> float:
+    """
+    Calculate binary cross-entropy (log loss).
+    
+    Formula: -[y*log(p) + (1-y)*log(1-p)]
+    
+    Args:
+        y_true: True binary labels (0 or 1)
+        y_prob: Predicted probabilities [0, 1]
+    
+    Returns:
+        Log loss value (lower is better)
+    """
+    y_prob = np.clip(y_prob, 1e-15, 1 - 1e-15)
+    return float(-np.mean(y_true * np.log(y_prob) + (1 - y_true) * np.log(1 - y_prob)))
 
 def accuracy(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     """

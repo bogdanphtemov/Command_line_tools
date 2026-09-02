@@ -31,7 +31,7 @@ from .session_adapter import (
 )
 from myclt.ML.session_storage import SessionStorage
 from myclt.ML.batch_predict import batch_predict_from_csv
-from myclt.common.input_validation import ask_yes_no, ask_int, ask_float, ask_choice
+from myclt.common.input_validation import ask_yes_no, ask_int, ask_float, ask_choice, ask_yes_no_recommended
 from myclt.common.ui_helpers import clear_screen, print_header, pause
 
 
@@ -237,9 +237,9 @@ def configure_split_interactive(s: AppState) -> None:
     print("\n" + "=" * 70)
     print("CONFIGURE TRAIN/TEST SPLIT")
     print("=" * 70)
-    s.test_size = ask_float("Test set size (0.05-0.5):", min_val=0.05, max_val=0.5, default=0.2)
-    s.seed = ask_int("Random seed:", min_val=0, max_val=10000, default=42)
-    s.use_scaling = ask_yes_no("Use feature scaling (standardization)?", default=True)
+    s.test_size = ask_float("Test size (0.05-0.5)", min_val=0.05, max_val=0.5, default=0.2)
+    s.seed = ask_int("Random seed (integer)", min_val=0, max_val=10000, default=42)
+    s.use_scaling = ask_yes_no_recommended("Use feature scaling (standardization)?", recommended=True)
     rebuild_split(s)
     print("✓ Split configuration updated")
     pause()

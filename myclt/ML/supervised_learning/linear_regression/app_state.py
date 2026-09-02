@@ -15,7 +15,9 @@ class AppState:
     seed: int = 42
     use_scaling: bool = True
     learning_rate: float = 0.05
-    epochs: int = 2000
+    learning_rate_auto: bool = True
+    epochs: int = 10000
+    early_stopping: bool = True
     
     # Regularization parameters
     use_l1: bool = False

@@ -75,11 +75,13 @@ class LinearRegressionGD(BaseModel, SupervisedModel):
     # New method: training with early stopping for acceleration
     def fit_with_early_stopping(self, X_train: np.ndarray, y_train: np.ndarray,
                                 X_val: np.ndarray, y_val: np.ndarray,
-                                patience: int = 50, verbose: bool = False) -> None:
+                                patience: int = 50, min_delta: float = 1e-6,
+                                verbose: bool = False) -> None:
         """
         Training with Early Stopping for convergence acceleration.
         
         Stops training if validation loss doesn't improve for 'patience' epochs.
+        Restores the best weights after stopping.
         
         Args:
             X_train, y_train: training data
@@ -95,6 +97,8 @@ class LinearRegressionGD(BaseModel, SupervisedModel):
         
         best_val_loss = float('inf')
         patience_counter = 0
+        best_w = None
+        best_b = 0.0
         
         # Training with validation check
         for epoch in range(1, self.epochs + 1):
@@ -118,6 +122,16 @@ class LinearRegressionGD(BaseModel, SupervisedModel):
             db = (2.0 / n_samples) * float(np.sum(errors))
             self.w -= self.learning_rate * dw
             self.b -= self.learning_rate * db
+
+            # ===== DIVERGENCE GUARD =====
+            if not np.all(np.isfinite(self.w)) or not np.isfinite(self.b):
+                if verbose:
+                    print(f"!Training diverged at epoch {epoch} (weights became NaN/inf)!")
+                # Restore best weights if available, else keep zeros
+                if best_w is not None:
+                    self.w = best_w.copy()
+                    self.b = best_b
+                return
             
             # ===== VALIDATION =====
             y_val_pred = X_val @ self.w + self.b
@@ -129,14 +143,19 @@ class LinearRegressionGD(BaseModel, SupervisedModel):
             val_loss = val_mse + val_l1 + val_l2
             
             # ===== EARLY STOPPING =====
-            if val_loss < best_val_loss:
+            if val_loss < best_val_loss - min_delta:
                 best_val_loss = val_loss
                 patience_counter = 0
+                best_w = self.w.copy()
+                best_b = self.b
             else:
                 patience_counter += 1
             
             # Stop if no improvement
             if patience_counter >= patience:
+                # Restore best weights
+                self.w = best_w.copy()
+                self.b = best_b
                 if verbose:
                     print(f"Early stopping at epoch {epoch}. Best val loss: {best_val_loss:.6f}")
                 break

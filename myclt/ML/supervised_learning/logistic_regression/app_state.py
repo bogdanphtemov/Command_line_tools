@@ -37,9 +37,13 @@ class AppState:
     
     # Model hyperparameters
     learning_rate: float = 0.01
-    epochs: int = 1000
+    learning_rate_auto: bool = True
+    epochs: int = 10000
+    epochs_auto: bool = True
     lambda_l2: float = 0.0
+    lambda_l2_auto: bool = True
     threshold: float = 0.5
+    early_stopping: bool = True
     
     # Split data (after features/target chosen)
     X_train: Optional[np.ndarray] = None
@@ -89,7 +93,14 @@ def print_status(s: AppState) -> None:
         )
     
     def format_regularization(state):
-        return "OFF" if state.lambda_l2 == 0.0 else f"L2(λ={state.lambda_l2})"
+        l2_str = ""
+        if getattr(state, 'lambda_l2_auto', False):
+            l2_str = "AUTO"
+        elif state.lambda_l2 > 0:
+            l2_str = f"L2(λ={state.lambda_l2})"
+        else:
+            l2_str = "OFF"
+        return l2_str
     
     universal_print_status(s, "Logistic Regression", format_metrics, format_regularization)
 

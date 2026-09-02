@@ -6,7 +6,7 @@ Provides interactive prompts and data selection dialogs.
 
 import numpy as np
 import os
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 
 from .app_state import AppState, print_status, rebuild_split
 from .data import Dataset, Prepareddata, load_csv_dataset, manual_input_dataset
@@ -21,7 +21,10 @@ from .visualization import (
 from .session_adapter import LogisticRegressionSessionAdapter
 from myclt.ML.session_storage import SessionStorage
 from myclt.ML.batch_predict import batch_predict_from_csv, batch_predict_interactive
-from myclt.common.input_validation import ask_yes_no, ask_int, ask_float, ask_choice
+from myclt.common.input_validation import (
+    ask_yes_no, ask_int, ask_float, ask_choice,
+    ask_yes_no_recommended, ask_auto_or_float, ask_auto_or_int
+)
 from myclt.common.ui_helpers import clear_screen, print_header, pause
 
 
@@ -55,33 +58,38 @@ def select_features_and_target_for_classification(dataset: Dataset) -> Preparedd
     return prepared
 
 
-def configure_model_hyperparameters() -> Tuple[float, int, float, float]:
+def configure_model_hyperparameters() -> Tuple[Optional[float], Optional[int], Optional[float], float]:
     """
     Interactive model hyperparameter configuration.
     
     Guides user to configure:
-        - Learning rate
-        - Number of epochs
-        - L2 regularization strength
-        - Classification threshold
+        - Learning rate (auto or specific)
+        - Max epochs (auto = 10000 + early stopping)
+        - L2 regularization (auto or specific)
+        - Classification threshold (specific)
     
     Returns:
-        Tuple of (learning_rate, epochs, lambda_l2, threshold)
+        Tuple of (learning_rate|None, epochs|None, lambda_l2|None, threshold)
+        None means "use auto-tuning"
     """
     print("\n" + "=" * 70)
     print("MODEL HYPERPARAMETER CONFIGURATION")
     print("=" * 70)
     
-    learning_rate = ask_float("Learning rate (default 0.01, range 0.001-0.1):", min_val=0.001, max_val=0.1, default=0.01)
-    epochs = ask_int("Number of epochs (default 1000, range 100-10000):", min_val=100, max_val=10000, default=1000)
-    lambda_l2 = ask_float("L2 regularization strength (default 0.0):", min_val=0.0, max_val=1.0, default=0.0)
-    threshold = ask_float("Classification threshold (default 0.5, range 0.1-0.9):", min_val=0.1, max_val=0.9, default=0.5)
+    lr = ask_auto_or_float("Learning rate", min_val=0.0001, max_val=1.0)
+    epochs = ask_auto_or_int("Max epochs", min_val=100, max_val=1_000_000)
+    l2_lambda = ask_auto_or_float("L2 regularization strength", min_val=0.0, max_val=1.0)
+    threshold = ask_float("Classification threshold", min_val=0.1, max_val=0.9, default=0.5)
     
     print("\n" + "=" * 70)
-    print(f"Configuration: lr={learning_rate}, epochs={epochs}, λ2={lambda_l2}, threshold={threshold}")
+    print("Configuration Summary:")
+    print(f"  Learning rate: {'AUTO' if lr is None else lr}")
+    print(f"  Max epochs: {'AUTO (10000, early stopping)' if epochs is None else epochs}")
+    print(f"  L2 regularization: {'AUTO' if l2_lambda is None else l2_lambda}")
+    print(f"  Threshold: {threshold:.4f}")
     print("=" * 70)
     
-    return learning_rate, epochs, lambda_l2, threshold
+    return lr, epochs, l2_lambda, threshold
 
 
 def show_prediction_example(feature_names: List[str]) -> np.ndarray:
@@ -168,9 +176,9 @@ def configure_split_interactive(s: AppState) -> None:
     print("\n" + "=" * 70)
     print("CONFIGURE TRAIN/TEST SPLIT")
     print("=" * 70)
-    s.test_size = ask_float("Test set size (0.05-0.5):", min_val=0.05, max_val=0.5, default=0.2)
-    s.seed = ask_int("Random seed:", min_val=0, max_val=10000, default=42)
-    s.use_scaling = ask_yes_no("Use feature scaling (standardization)?", default=True)
+    s.test_size = ask_float("Test size (0.05-0.5)", min_val=0.05, max_val=0.5, default=0.2)
+    s.seed = ask_int("Random seed (integer)", min_val=0, max_val=10000, default=42)
+    s.use_scaling = ask_yes_no_recommended("Use feature scaling (standardization)?", recommended=True)
     rebuild_split(s)
     print("✓ Split configuration updated")
 
@@ -179,7 +187,22 @@ def configure_model_interactive(s: AppState) -> None:
     print("\n" + "=" * 70)
     print("CONFIGURE MODEL")
     print("=" * 70)
-    s.learning_rate, s.epochs, s.lambda_l2, s.threshold = configure_model_hyperparameters()
+    lr, epochs, l2_lambda, threshold = configure_model_hyperparameters()
+    
+    # Apply auto flags based on returned values
+    s.learning_rate_auto = lr is None
+    if lr is not None:
+        s.learning_rate = lr
+    s.epochs_auto = epochs is None
+    if epochs is not None:
+        s.epochs = epochs
+    else:
+        s.epochs = 10000  # default max
+    s.lambda_l2_auto = l2_lambda is None
+    if l2_lambda is not None:
+        s.lambda_l2 = l2_lambda
+    s.threshold = threshold
+    s.early_stopping = True  # always ON
     print("✓ Model configured")
 
 
@@ -191,24 +214,77 @@ def train_model_interactive(s: AppState) -> None:
     print("TRAINING MODEL")
     print("=" * 70)
     try:
+        # Auto-tune learning rate if needed
+        if s.learning_rate_auto:
+            print("\n" + "=" * 70)
+            from .hyperparameter_tuning import auto_tune_learning_rate
+            try:
+                lr_result = auto_tune_learning_rate(
+                    X=s.X_train,
+                    y=s.y_train,
+                    max_epochs=s.epochs,
+                    k_folds=3,
+                    seed=s.seed,
+                    use_scaling=False,
+                    verbose=True
+                )
+                s.learning_rate = lr_result['best_lr']
+                print(f"\n=> Learning rate set to: {s.learning_rate}")
+                print("=" * 70)
+            except RuntimeError as e:
+                print(f"\n!{e}")
+                print("Falling back to default learning rate 0.01.")
+                s.learning_rate = 0.01
+        else:
+            print(f"\nUsing manual learning rate: {s.learning_rate}")
+        
+        # Auto-tune L2 if needed
+        if s.lambda_l2_auto:
+            from .hyperparameter_tuning import auto_tune_l2
+            try:
+                l2_result = auto_tune_l2(
+                    X=s.X_train,
+                    y=s.y_train,
+                    learning_rate=s.learning_rate,
+                    max_epochs=s.epochs,
+                    k_folds=3,
+                    seed=s.seed,
+                    use_scaling=False,
+                    verbose=True
+                )
+                s.lambda_l2 = l2_result['best_lambda_l2']
+                print(f"\n=> L2 strength set to: {s.lambda_l2}")
+                print("=" * 70)
+            except RuntimeError as e:
+                print(f"\n!{e}")
+                print("Falling back to L2=0.0.")
+                s.lambda_l2 = 0.0
+        else:
+            print(f"\nUsing manual L2: {s.lambda_l2}")
+        
+        # Create model
         s.model = LogisticRegressionGD(
             learning_rate=s.learning_rate,
             epochs=s.epochs,
             lambda_l2=s.lambda_l2,
             threshold=s.threshold
         )
-        use_early_stopping = ask_yes_no("Use early stopping?", default=False)
-        if use_early_stopping:
-            n_train = len(s.X_train)
-            val_size = int(0.2 * n_train)
-            X_train_part = s.X_train[val_size:]
-            y_train_part = s.y_train[val_size:]
-            X_val = s.X_train[:val_size]
-            y_val = s.y_train[:val_size]
-            patience = ask_int("Patience (epochs without improvement):", min_val=5, max_val=200, default=50)
-            s.model.fit_with_early_stopping(X_train_part, y_train_part, X_val, y_val, patience=patience)
-        else:
-            s.model.fit(s.X_train, s.y_train)
+        
+        # Train with early stopping (always ON)
+        n_train = len(s.X_train)
+        val_size = int(0.2 * n_train)
+        X_train_part = s.X_train[val_size:]
+        y_train_part = s.y_train[val_size:]
+        X_val = s.X_train[:val_size]
+        y_val = s.y_train[:val_size]
+        patience = ask_int("Patience (epochs without improvement)", min_val=5, max_val=200, default=50)
+        
+        print(f"\nTraining with early stopping (patience={patience}, min_delta=1e-6)...")
+        s.model.fit_with_early_stopping(
+            X_train_part, y_train_part,
+            X_val, y_val,
+            patience=patience, verbose=True
+        )
         print(f"✓ Training complete ({len(s.model.loss_history)} epochs)")
         if ask_yes_no("Show loss history?", default=True):
             plot_loss_curve(s.model.loss_history)
@@ -323,9 +399,9 @@ def menu_data(s: AppState) -> None:
                 print("✗ No dataset loaded yet!")
                 pause()
                 continue
-            s.test_size = ask_float("Test set size (0.05-0.5):", min_val=0.05, max_val=0.5, default=0.2)
-            s.seed = ask_int("Random seed:", min_val=0, max_val=10000, default=42)
-            s.use_scaling = ask_yes_no("Use feature scaling (standardization)?", default=True)
+            s.test_size = ask_float("Test size (0.05-0.5)", min_val=0.05, max_val=0.5, default=0.2)
+            s.seed = ask_int("Random seed (integer)", min_val=0, max_val=10000, default=42)
+            s.use_scaling = ask_yes_no_recommended("Use feature scaling (standardization)?", recommended=True)
             rebuild_split(s)
             print("✓ Split configuration updated")
             pause()
@@ -345,8 +421,7 @@ def menu_train(s: AppState) -> None:
         ]
         choice = ask_choice("", options)
         if choice == 0:
-            s.learning_rate, s.epochs, s.lambda_l2, s.threshold = configure_model_hyperparameters()
-            print("✓ Model configured")
+            configure_model_interactive(s)
             pause()
         elif choice == 1:
             train_model_interactive(s)

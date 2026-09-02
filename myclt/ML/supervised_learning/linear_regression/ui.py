@@ -7,9 +7,12 @@ from .preprocessing import standardize_apply
 from .metrics import mse , rmse , r2_score
 from .visualization import plot_loss_curve , plot_true_vs_pred , plot_1d_regression
 from .core import LinearRegressionGD
-from .hyperparameter_tuning import grid_search_regularization
+from .hyperparameter_tuning import grid_search_regularization, auto_tune_learning_rate
 from .session_adapter import LinearRegressionSessionAdapter
-from myclt.common.input_validation import ask_choice , ask_int , ask_float , ask_yes_no
+from myclt.common.input_validation import (
+    ask_choice, ask_int, ask_float, ask_yes_no,
+    ask_learning_rate, ask_yes_no_recommended
+)
 from myclt.common.ui_helpers import clear_screen , print_header , pause
 from myclt.ML.session_storage import SessionStorage
 from myclt.ML.batch_predict import batch_predict_from_csv, batch_predict_interactive
@@ -247,8 +250,8 @@ def menu_data(s: AppState) -> None:
             pause()
 
         elif choice == 4:
-            s.test_size = ask_float("test_size (0.05-0.5): " , 0.05 , 0.5)
-            s.seed = ask_int("seed (integer): ")
+            s.test_size = ask_float("Test size (0.05-0.5)", min_val=0.05, max_val=0.5, default=0.2)
+            s.seed = ask_int("Random seed (integer)", min_val=0, max_val=10000, default=42)
 
             if s.prepareddata is not None:
                 try:
@@ -279,17 +282,38 @@ def menu_train(s: AppState) -> None:
         choice = ask_choice("" , options)
 
         if choice == 0:
-            s.use_scaling = ask_yes_no("Enable standardization scaling? (y/n): ")
-            s.learning_rate = ask_float("learning_rate (e.g. 0.01..0.2): ", 1e-6, 10.0)
-            s.epochs = ask_int("epochs (e.g. 500..10000): ", 1, 1_000_000)
-
+            clear_screen()
+            print_header("Training Parameters")
+            
+            s.use_scaling = ask_yes_no_recommended("Enable standardization scaling?", recommended=True)
+            lr_input = ask_learning_rate("Learning rate")
+            if lr_input != 0.0:
+                s.learning_rate_auto = False
+                s.learning_rate = lr_input
+            else:
+                s.learning_rate_auto = True
+            s.epochs = ask_int("Max epochs", min_val=100, max_val=1_000_000, default=10000)
+            
+            # Early stopping is always ON (no prompt)
+            s.early_stopping = True
+            
+            # Summary
+            print("\n" + "=" * 72)
+            print("Configuration Summary")
+            print("=" * 72)
+            print(f"Scaling: {'ON' if s.use_scaling else 'OFF'}")
+            print(f"Learning rate: {'AUTO' if s.learning_rate_auto else s.learning_rate}")
+            print(f"Max epochs: {s.epochs}")
+            print(f"Early stopping: ON")
+            print("=" * 72)
+            
             if s.prepareddata is not None:
                 try:
                     rebuild_split(s)
                     print("Data pipeline rebuilt with new settings.")
                 except Exception as e:
                         print(f"!Error: {e}!")
-
+            
             pause()
         
         elif choice == 1:
@@ -307,13 +331,13 @@ def menu_train(s: AppState) -> None:
             print("- Reduces all weights but doesn't zero them")
             print("- Use when: all features matter but you want smaller weights\n")
             
-            s.use_l1 = ask_yes_no("Enable L1 (Lasso) regularization? (y/n): ")
+            s.use_l1 = ask_yes_no("Enable L1 (Lasso) regularization? (y/n)")
             if s.use_l1:
-                s.lambda_l1 = ask_float("L1 strength λ₁ (e.g. 0.001..0.1): ", 1e-6, 10.0)
+                s.lambda_l1 = ask_float("L1 strength λ₁ (e.g. 0.001..0.1)", 1e-6, 10.0)
             
-            s.use_l2 = ask_yes_no("Enable L2 (Ridge) regularization? (y/n): ")
+            s.use_l2 = ask_yes_no("Enable L2 (Ridge) regularization? (y/n)")
             if s.use_l2:
-                s.lambda_l2 = ask_float("L2 strength λ₂ (e.g. 0.001..0.1): ", 1e-6, 10.0)
+                s.lambda_l2 = ask_float("L2 strength λ₂ (e.g. 0.001..0.1)", 1e-6, 10.0)
             
             if s.use_l1 or s.use_l2:
                 reg_info = []
@@ -347,10 +371,10 @@ def menu_train(s: AppState) -> None:
             print("\nConfiguring grid search parameters...\n")
             
             # L1 search range
-            use_l1_search = ask_yes_no("Include L1 (Lasso) in search? (y/n): ")
+            use_l1_search = ask_yes_no("Include L1 (Lasso) in search?")
             
             # L2 search range
-            use_l2_search = ask_yes_no("Include L2 (Ridge) in search? (y/n): ")
+            use_l2_search = ask_yes_no("Include L2 (Ridge) in search?")
             
             if not use_l1_search and not use_l2_search:
                 print("!At least one regularization type must be selected!")
@@ -384,17 +408,27 @@ def menu_train(s: AppState) -> None:
                 print("\n" + "=" * 72)
                 print("GRID SEARCH RESULTS")
                 print("=" * 72)
-                print(f"\nBest L1 (Lasso):  {results['best_lambda_l1']:.6f}")
-                print(f"Best L2 (Ridge):  {results['best_lambda_l2']:.6f}")
-                print(f"Best CV MSE:      {results['best_mse']:.6f}")
-                
+
+                best_l1 = results['best_lambda_l1']
+                best_l2 = results['best_lambda_l2']
+
+                print(f"\nBest L1: {best_l1:.6f}")
+                print(f"Best L2: {best_l2:.6f}")
+
+                if best_l1 == 0.0 and best_l2 == 0.0:
+                    print(f"\nBest CV MSE:      {results['best_mse']:.6f}")
+                    print("\nRegularization effect:")
+                    print("No regularization performed best on validation data.")
+                else:
+                    print(f"Best CV MSE:      {results['best_mse']:.6f}")
+
                 # Show top 5 combinations 
                 print("\nTop 5 Combinations:")
                 for idx, result in enumerate(results['results'][:5], 1):
                     print(f"{idx}. L1={result['l1']:.6f} L2={result['l2']:.6f} | MSE={result['mean_mse']:.6f} ± {result['std_mse']:.6f}")
                 
                 # Ask if user wants to apply
-                apply_result = ask_yes_no("\nApply these parameters to model? (y/n): ")
+                apply_result = ask_yes_no("\nApply these parameters to model?")
                 if apply_result:
                     s.use_l1 = results['best_lambda_l1'] > 0
                     s.use_l2 = results['best_lambda_l2'] > 0
@@ -419,8 +453,29 @@ def menu_train(s: AppState) -> None:
                 pause()
                 continue
             
-            # Ask about early stopping
-            use_early_stopping = ask_yes_no("Use early stopping?", default=False)
+            # Auto-tune learning rate if needed
+            if s.learning_rate_auto:
+                print("\n" + "=" * 72)
+                try:
+                    lr_result = auto_tune_learning_rate(
+                        X=s.X_train,
+                        y=s.y_train,
+                        epochs=s.epochs,
+                        k_folds=3,
+                        seed=s.seed,
+                        use_scaling=False,  # Already scaled by rebuild_split
+                        early_stopping_patience=50,
+                        verbose=True
+                    )
+                    s.learning_rate = lr_result['best_lr']
+                    print(f"\n=> Learning rate set to: {s.learning_rate}")
+                except RuntimeError as e:
+                    print(f"!{e}")
+                    print("Falling back to default learning rate 0.01.")
+                    s.learning_rate = 0.01
+                print("=" * 72)
+            else:
+                print(f"\nUsing manual learning rate: {s.learning_rate}")
             
             # Create model with regularization parameters
             model = LinearRegressionGD(
@@ -430,21 +485,18 @@ def menu_train(s: AppState) -> None:
                 lambda_l2=s.lambda_l2 if s.use_l2 else 0.0
             )
             
-            if use_early_stopping:
-                # Split training data into train/validation for early stopping
-                n_train = len(s.X_train)
-                val_size = int(0.2 * n_train)
-                X_train_part = s.X_train[val_size:]
-                y_train_part = s.y_train[val_size:]
-                X_val = s.X_train[:val_size]
-                y_val = s.y_train[:val_size]
-                patience = ask_int("Patience (epochs without improvement):", min_val=5, max_val=200, default=50)
-                
-                print(f"\nTraining with early stopping (patience={patience})...")
-                model.fit_with_early_stopping(X_train_part, y_train_part, X_val, y_val, patience=patience, verbose=True)
-            else:
-                print("\nTraining without early stopping...")
-                model.fit(s.X_train , s.y_train)
+            # Early stopping is always ON
+            # Split training data into train/validation for early stopping
+            n_train = len(s.X_train)
+            val_size = int(0.2 * n_train)
+            X_train_part = s.X_train[val_size:]
+            y_train_part = s.y_train[val_size:]
+            X_val = s.X_train[:val_size]
+            y_val = s.y_train[:val_size]
+            patience = ask_int("Patience (epochs without improvement)", min_val=5, max_val=200, default=50)
+            
+            print(f"\nTraining with early stopping (patience={patience}, min_delta=1e-6)...")
+            model.fit_with_early_stopping(X_train_part, y_train_part, X_val, y_val, patience=patience, verbose=True)
 
             s.model = model
 
@@ -572,7 +624,7 @@ def menu_predict(s: AppState) -> None:
             print("\nEnter feature values:")
 
             for name in s.prepareddata.feature_names:
-                v = ask_float(f"{name}: ")
+                v = ask_float(name)
                 vals.append(v)
             
             X_new = np.array(vals ,dtype=float).reshape(1 , -1)

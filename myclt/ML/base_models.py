@@ -285,7 +285,16 @@ def universal_print_status(state: Any, model_name: str,
     print(f"Selection:    {sup}")
     print(f"Split:        test_size={state.test_size}; seed={state.seed}")
     print(f"Scaling:      {'ON' if state.use_scaling else 'OFF'}")
-    print(f"Model:        trained={trained} (lr={state.learning_rate}, epochs={state.epochs})")
+    # Flexible LR display: AUTO if learning_rate_auto is True, else exact value
+    lr_auto = getattr(state, 'learning_rate_auto', False)
+    lr_str = "AUTO" if lr_auto else f"lr={state.learning_rate}"
+    epochs_str = f"epochs={state.epochs}"
+    # Early stopping status (only if attribute exists)
+    es_str = ""
+    if getattr(state, 'early_stopping', False):
+        es_str = ", early_stop=ON"
+    
+    print(f"Model:        trained={trained} ({lr_str}, {epochs_str}{es_str})")
     print(f"Regularization: {reg_status}")
     print(f"Metrics:      {metrics}")
     print("=" * 80)
