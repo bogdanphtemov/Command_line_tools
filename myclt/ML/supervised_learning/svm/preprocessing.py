@@ -21,9 +21,37 @@ from myclt.ML.base_models import (
     standardize_fit,
     standardize_apply,
 )
+import numpy as np
+from typing import List, Tuple
+
+
+def k_fold_split(X: np.ndarray, y: np.ndarray, k: int = 5, seed: int = 42) -> List[Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]]:
+    """
+    K-Fold Cross-Validation split generator.
+    Returns k tuples of (X_train, X_val, y_train, y_val)
+    """
+    if k < 2:
+        raise ValueError("k must be at least 2")
+    
+    n = X.shape[0]
+    rng = np.random.default_rng(seed)
+    idx = np.arange(n)
+    rng.shuffle(idx)
+    
+    fold_indices = np.array_split(idx, k)
+    folds = []
+    
+    for fold_idx in range(k):
+        val_idx = fold_indices[fold_idx]
+        train_idx = np.concatenate([fold_indices[i] for i in range(k) if i != fold_idx])
+        folds.append((X[train_idx], X[val_idx], y[train_idx], y[val_idx]))
+    
+    return folds
+
 
 __all__ = [
     'train_test_split',
     'standardize_fit',
     'standardize_apply',
+    'k_fold_split',
 ]

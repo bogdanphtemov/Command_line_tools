@@ -306,3 +306,265 @@ def random_search_cv(X: np.ndarray, y: np.ndarray,
         _print_results(best_params, best_score, task, "RANDOM SEARCH")
 
     return best_params, best_score
+def auto_tune_learning_rate(
+    X: np.ndarray,
+    y: np.ndarray,
+    model_class: Type,
+    C: float = 1.0,
+    max_epochs: int = 10000,
+    k_folds: int = 3,
+    seed: int = 42,
+    use_scaling: bool = True,
+    early_stopping_patience: int = 50,
+    task: str = 'classifier',
+    do_refine: bool = True,
+    verbose: bool = True
+) -> Dict[str, Any]:
+    """
+    Auto-tune the learning rate for SVM models via K-fold CV.
+    Uses validation loss (hinge for classifier, MSE for regressor).
+    Two-phase approach: coarse log-scale search + refinement.
+    """
+    lr_grid = [0.0001, 0.0003, 0.001, 0.003, 0.01, 0.03, 0.1]
+
+    if verbose:
+        print("Auto-tuning learning rate...")
+        print("=" * 72)
+        print(f"Grid: {lr_grid}")
+        print(f"Using {k_folds}-fold CV, max_epochs={max_epochs}")
+        if use_scaling:
+            print("Scaling inside fold: ON")
+        else:
+            print("Data already scaled externally")
+        print("=" * 72)
+
+    from .preprocessing import k_fold_split, standardize_fit, standardize_apply
+
+    folds = k_fold_split(X, y, k=k_folds, seed=seed)
+    results = []
+
+    for lr in lr_grid:
+        fold_losses = []
+        diverged = False
+
+        for _, (X_train, X_val, y_train, y_val) in enumerate(folds):
+            if use_scaling:
+                X_train_s, mean, std = standardize_fit(X_train)
+                X_val_s = standardize_apply(X_val, mean, std)
+            else:
+                X_train_s = X_train
+                X_val_s = X_val
+
+            model = model_class(C=C, learning_rate=lr, epochs=max_epochs)
+            model.fit_with_early_stopping(
+                X_train_s, y_train, X_val_s, y_val,
+                patience=early_stopping_patience, min_delta=1e-6
+            )
+
+            if not model.is_trained or not np.all(np.isfinite(model.w if hasattr(model, 'w') else model.beta)):
+                diverged = True
+                break
+
+            if task == 'classifier':
+                from .metrics import accuracy
+                y_pred = model.predict(X_val_s)
+                # Convert labels to numeric
+                unique_y = np.unique(y_val)
+                if np.issubdtype(np.array(y_val).dtype, np.str_) or len(set(unique_y) - {0, 1, -1}) > 0:
+                    y_val_cmp = np.where(y_val == unique_y[1], 1, 0).astype(int)
+                else:
+                    y_val_cmp = y_val.astype(int)
+                fold_loss = 1.0 - accuracy(y_val_cmp, y_pred)  # Error Rate (lower is better, ~0.001 means 99.9% accuracy)
+            else:
+                from .metrics import mean_squared_error
+                y_pred = model.predict(X_val_s)
+                fold_loss = mean_squared_error(y_val, y_pred)
+
+            fold_losses.append(fold_loss)
+
+        if diverged:
+            if verbose:
+                print(f"  Testing {lr:.4g} ... DIVERGED")
+            results.append({'lr': lr, 'mean_loss': None, 'diverged': True})
+        else:
+            mean_loss = float(np.mean(fold_losses))
+            metric = 'Error Rate' if task == 'classifier' else 'MSE'
+            if verbose:
+                print(f"  Testing {lr:.4g} ... {metric}: {mean_loss:.4e}")
+            results.append({'lr': lr, 'mean_loss': mean_loss, 'diverged': False})
+
+    valid = [r for r in results if not r['diverged']]
+    if not valid:
+        raise RuntimeError("All learning rates diverged! Cannot auto-tune.")
+
+    valid.sort(key=lambda x: x['mean_loss'])
+    best_lr = valid[0]['lr']
+    best_loss = valid[0]['mean_loss']
+
+    # Phase 2: refine
+    if do_refine and best_lr > 0:
+        factor = 2.0
+        refine = sorted(set(
+            round(best_lr / factor ** (i / 2), 10) for i in range(-2, 3)
+        ))
+        refine = [lr for lr in refine if 1e-8 <= lr <= 1.0]
+
+        if len(refine) > 1:
+            if verbose:
+                print("\nRefining search around best LR...")
+                print(f"Phase 2 grid: {refine}")
+                print("-" * 72)
+
+            for lr in refine:
+                fold_losses = []
+                diverged = False
+                for _, (X_tr, X_v, y_tr, y_v) in enumerate(folds):
+                    if use_scaling:
+                        X_tr_s, m, s = standardize_fit(X_tr)
+                        X_v_s = standardize_apply(X_v, m, s)
+                    else:
+                        X_tr_s = X_tr
+                        X_v_s = X_v
+
+                    model = model_class(C=C, learning_rate=lr, epochs=max_epochs)
+                    model.fit_with_early_stopping(
+                        X_tr_s, y_tr, X_v_s, y_v,
+                        patience=early_stopping_patience, min_delta=1e-6
+                    )
+
+                    if not model.is_trained or not np.all(np.isfinite(model.w if hasattr(model, 'w') else model.beta)):
+                        diverged = True
+                        break
+
+                    if task == 'classifier':
+                        from .metrics import accuracy
+                        y_pred = model.predict(X_v_s)
+                        unique_y2 = np.unique(y_v)
+                        if np.issubdtype(np.array(y_v).dtype, np.str_) or len(set(unique_y2) - {0, 1, -1}) > 0:
+                            y_v_cmp = np.where(y_v == unique_y2[1], 1, 0).astype(int)
+                        else:
+                            y_v_cmp = y_v.astype(int)
+                        fold_loss = 1.0 - accuracy(y_v_cmp, y_pred)  # Error Rate (lower is better, ~0.001 means 99.9% accuracy)
+                    else:
+                        from .metrics import mean_squared_error
+                        y_pred = model.predict(X_v_s)
+                        fold_loss = mean_squared_error(y_v, y_pred)
+                    fold_losses.append(fold_loss)
+
+                if not diverged:
+                    mean_loss = float(np.mean(fold_losses))
+                    if mean_loss < best_loss:
+                        best_lr = lr
+                        best_loss = mean_loss
+                    if verbose:
+                        metric = 'Error Rate' if task == 'classifier' else 'MSE'
+                        print(f"  Testing {lr:.4g} ... {metric}: {mean_loss:.4e}")
+
+    if verbose:
+        print("=" * 72)
+        print(f"Best learning rate: {best_lr}")
+        print(f"Best validation loss: {best_loss:.6e}")
+        print("=" * 72)
+
+    return {'best_lr': best_lr, 'best_loss': best_loss, 'results': results}
+def auto_tune_C(
+    X: np.ndarray,
+    y: np.ndarray,
+    model_class: Type,
+    learning_rate: float,
+    max_epochs: int = 10000,
+    k_folds: int = 3,
+    seed: int = 42,
+    use_scaling: bool = True,
+    early_stopping_patience: int = 50,
+    task: str = 'classifier',
+    verbose: bool = True
+) -> Dict[str, Any]:
+    """
+    Auto-tune the regularization parameter C for SVM models via K-fold CV.
+    Uses validation loss (hinge for classifier, MSE for regressor).
+    """
+    C_grid = [0.001, 0.01, 0.1, 1.0, 10.0, 100.0, 1000.0]
+
+    if verbose:
+        print("\nAuto-tuning regularization C...")
+        print("=" * 72)
+        print(f"Grid: {C_grid}")
+        print(f"Using {k_folds}-fold CV, max_epochs={max_epochs}")
+        print(f"Learning rate fixed at: {learning_rate}")
+        if use_scaling:
+            print("Scaling inside fold: ON")
+        else:
+            print("Data already scaled externally")
+        print("=" * 72)
+
+    from .preprocessing import k_fold_split, standardize_fit, standardize_apply
+
+    folds = k_fold_split(X, y, k=k_folds, seed=seed)
+    results = []
+
+    for C_val in C_grid:
+        fold_losses = []
+        diverged = False
+
+        for _, (X_train, X_val, y_train, y_val) in enumerate(folds):
+            if use_scaling:
+                X_train_s, mean, std = standardize_fit(X_train)
+                X_val_s = standardize_apply(X_val, mean, std)
+            else:
+                X_train_s = X_train
+                X_val_s = X_val
+
+            model = model_class(C=C_val, learning_rate=learning_rate, epochs=max_epochs)
+            model.fit_with_early_stopping(
+                X_train_s, y_train, X_val_s, y_val,
+                patience=early_stopping_patience, min_delta=1e-6
+            )
+
+            if not model.is_trained or not np.all(np.isfinite(model.w if hasattr(model, 'w') else model.beta)):
+                diverged = True
+                break
+
+            if task == 'classifier':
+                from .metrics import accuracy
+                y_pred = model.predict(X_val_s)
+                # Convert labels to numeric
+                unique_y = np.unique(y_val)
+                if np.issubdtype(np.array(y_val).dtype, np.str_) or len(set(unique_y) - {0, 1, -1}) > 0:
+                    y_val_cmp = np.where(y_val == unique_y[1], 1, 0).astype(int)
+                else:
+                    y_val_cmp = y_val.astype(int)
+                fold_loss = 1.0 - accuracy(y_val_cmp, y_pred)  # Error Rate (lower is better, ~0.001 means 99.9% accuracy)
+            else:
+                from .metrics import mean_squared_error
+                y_pred = model.predict(X_val_s)
+                fold_loss = mean_squared_error(y_val, y_pred)
+
+            fold_losses.append(fold_loss)
+
+        if diverged:
+            if verbose:
+                print(f"  Testing C={C_val:.4g} ... DIVERGED")
+            results.append({'C': C_val, 'mean_loss': None, 'diverged': True})
+        else:
+            mean_loss = float(np.mean(fold_losses))
+            metric = 'Error Rate' if task == 'classifier' else 'MSE'
+            if verbose:
+                print(f"  Testing C={C_val:.4g} ... {metric}: {mean_loss:.4e}")
+            results.append({'C': C_val, 'mean_loss': mean_loss, 'diverged': False})
+
+    valid = [r for r in results if not r['diverged']]
+    if not valid:
+        raise RuntimeError("All C values diverged! Cannot auto-tune.")
+
+    valid.sort(key=lambda x: x['mean_loss'])
+    best_C = valid[0]['C']
+    best_loss = valid[0]['mean_loss']
+
+    if verbose:
+        print("=" * 72)
+        print(f"Best C: {best_C}")
+        print(f"Best validation loss: {best_loss:.6e}")
+        print("=" * 72)
+
+    return {'best_C': best_C, 'best_loss': best_loss, 'results': results}

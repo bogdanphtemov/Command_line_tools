@@ -49,8 +49,11 @@ class AppState:
     # Common
     model_type: str = "linear_svm"  # Which algorithm to use
     C: float = 1.0                  # Regularization (inverse of λ), must be > 0
+    C_auto: bool = True             # Auto-tune C
     learning_rate: float = 0.001
-    epochs: int = 1000
+    learning_rate_auto: bool = True  # Auto-tune learning rate
+    epochs: int = 10000             # Max epochs (early stopping will stop earlier)
+    early_stopping: bool = True     # Always ON by default
 
     # LinearSVM specific
     batch_size: int = 0  # 0 = full batch
@@ -145,10 +148,11 @@ def print_status(s: AppState) -> None:
             elif state.kernel == "sigmoid":
                 kernel_params.append(f"coef0={state.coef0}")
 
+        c_str = "AUTO" if getattr(state, 'C_auto', False) else f"C={state.C}"
         if state.model_type in ("linear_svr", "kernel_svr"):
-            return ", ".join([f"C={state.C}", *kernel_params, f"ε={state.epsilon}"])
+            return ", ".join([c_str, *kernel_params, f"ε={state.epsilon}"])
         else:
-            return ", ".join([f"C={state.C}", *(kernel_params or ["linear"])])
+            return ", ".join([c_str, *(kernel_params or ["linear"])])
 
     mode_str = "SVM Classification" if s.mode == "classifier" else "SVR Regression"
     extra = ""

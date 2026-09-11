@@ -31,7 +31,10 @@ from .session_adapter import (
 )
 from myclt.ML.session_storage import SessionStorage
 from myclt.ML.batch_predict import batch_predict_from_csv
-from myclt.common.input_validation import ask_yes_no, ask_int, ask_float, ask_choice, ask_yes_no_recommended
+from myclt.common.input_validation import (
+    ask_yes_no, ask_int, ask_float, ask_choice,
+    ask_yes_no_recommended, ask_auto_or_float, ask_auto_or_int
+)
 from myclt.common.ui_helpers import clear_screen, print_header, pause
 
 
@@ -88,27 +91,28 @@ def configure_common_hyperparameters(mode: str = 'classifier') -> dict:
     print("COMMON HYPERPARAMETER CONFIGURATION")
     print("=" * 70)
 
-    C = ask_float("Regularization C (0.001-1000, default=1.0):",
-                  min_val=0.001, max_val=1000.0, default=1.0)
-    learning_rate = ask_float("Learning rate (0.0001-0.1, default=0.001):",
-                              min_val=0.0001, max_val=0.1, default=0.001)
-    epochs = ask_int("Epochs (100-10000, default=1000):",
-                     min_val=100, max_val=10000, default=1000)
+    C = ask_auto_or_float("Regularization C", min_val=0.001, max_val=1000.0)
+    lr = ask_auto_or_float("Learning rate", min_val=0.0001, max_val=1.0)
+    epochs = ask_int("Max epochs", min_val=100, max_val=100000, default=10000)
+
+    print("\n" + "=" * 70)
+    print("Configuration Summary:")
+    print(f"  C: {'AUTO' if C is None else C}")
+    print(f"  Learning rate: {'AUTO' if lr is None else lr}")
+    print(f"  Max epochs: {epochs}")
+    print(f"  Early stopping: ON")
+    print("=" * 70)
 
     params = {
         'C': C,
-        'learning_rate': learning_rate,
+        'learning_rate': lr,
         'epochs': epochs,
     }
 
     if mode == 'regressor':
-        epsilon = ask_float("Epsilon (ε-insensitive tube, 0.001-1.0, default=0.1):",
+        epsilon = ask_float("Epsilon (ε-insensitive tube, 0.001-1.0, default=0.1)",
                             min_val=0.001, max_val=1.0, default=0.1)
         params['epsilon'] = epsilon
-
-    print("\n" + "=" * 70)
-    print(f"Configuration: {params}")
-    print("=" * 70)
 
     return params
 
@@ -263,9 +267,14 @@ def configure_model_interactive(s: AppState) -> None:
 
     # Common params
     common = configure_common_hyperparameters(s.mode)
-    s.C = common['C']
-    s.learning_rate = common['learning_rate']
+    s.C_auto = common['C'] is None
+    if common['C'] is not None:
+        s.C = common['C']
+    s.learning_rate_auto = common['learning_rate'] is None
+    if common['learning_rate'] is not None:
+        s.learning_rate = common['learning_rate']
     s.epochs = common['epochs']
+    s.early_stopping = True
     if s.mode == 'regressor' and 'epsilon' in common:
         s.epsilon = common['epsilon']
 
@@ -281,7 +290,7 @@ def configure_model_interactive(s: AppState) -> None:
 
 
 def train_model_interactive(s: AppState) -> None:
-    """Train SVM model interactively."""
+    """Train SVM model interactively with auto-tuning."""
     if s.X_train is None or s.y_train is None:
         print("✗ No training data prepared yet!")
         return
@@ -291,6 +300,42 @@ def train_model_interactive(s: AppState) -> None:
     print("=" * 70)
 
     try:
+        # Auto-tune learning rate if needed
+        if s.learning_rate_auto:
+            from .hyperparameter_tuning import auto_tune_learning_rate
+            model_class = LinearSVM if s.model_type == 'linear_svm' else (
+                KernelSVM if s.model_type == 'kernel_svm' else (
+                    LinearSVR if s.model_type == 'linear_svr' else KernelSVR
+                )
+            )
+            task = 'classifier' if s.mode == 'classifier' else 'regressor'
+            lr_result = auto_tune_learning_rate(
+                X=s.X_train, y=s.y_train,
+                model_class=model_class, C=s.C,
+                max_epochs=s.epochs, k_folds=3, seed=s.seed,
+                use_scaling=False, task=task, verbose=True
+            )
+            s.learning_rate = lr_result['best_lr']
+            print(f"\n=> Learning rate set to: {s.learning_rate}")
+
+        # Auto-tune C if needed
+        if s.C_auto:
+            from .hyperparameter_tuning import auto_tune_C
+            model_class = LinearSVM if s.model_type == 'linear_svm' else (
+                KernelSVM if s.model_type == 'kernel_svm' else (
+                    LinearSVR if s.model_type == 'linear_svr' else KernelSVR
+                )
+            )
+            task = 'classifier' if s.mode == 'classifier' else 'regressor'
+            C_result = auto_tune_C(
+                X=s.X_train, y=s.y_train,
+                model_class=model_class, learning_rate=s.learning_rate,
+                max_epochs=s.epochs, k_folds=3, seed=s.seed,
+                use_scaling=False, task=task, verbose=True
+            )
+            s.C = C_result['best_C']
+            print(f"\n=> C set to: {s.C}")
+
         # Create model based on type
         if s.model_type == "linear_svm":
             s.model = LinearSVM(
@@ -314,25 +359,23 @@ def train_model_interactive(s: AppState) -> None:
                 learning_rate=s.learning_rate, epochs=s.epochs
             )
 
-        # Optional early stopping
-        use_early_stopping = ask_yes_no("Use early stopping? (validation split)", default=False)
-        if use_early_stopping and hasattr(s.model, 'fit_with_early_stopping'):
-            n_train = len(s.X_train)
-            val_size = int(0.2 * n_train)
-            X_train_part = s.X_train[val_size:]
-            y_train_part = s.y_train[val_size:]
-            X_val = s.X_train[:val_size]
-            y_val = s.y_train[:val_size]
-            patience = ask_int("Patience (epochs without improvement):",
-                               min_val=5, max_val=200, default=50)
-            s.model.fit_with_early_stopping(
-                X_train_part, y_train_part, X_val, y_val,
-                patience=patience, verbose=True
-            )
-        else:
-            s.model.fit(s.X_train, s.y_train)
+        # Train with early stopping (always ON)
+        n_train = len(s.X_train)
+        val_size = int(0.2 * n_train)
+        X_train_part = s.X_train[val_size:]
+        y_train_part = s.y_train[val_size:]
+        X_val = s.X_train[:val_size]
+        y_val = s.y_train[:val_size]
+        patience = ask_int("Patience (epochs without improvement)",
+                           min_val=5, max_val=200, default=50)
 
-        print(f"✓ Training complete ({len(s.model.loss_history)} checkpoints)")
+        print(f"\nTraining with early stopping (patience={patience}, min_delta=1e-6)...")
+        s.model.fit_with_early_stopping(
+            X_train_part, y_train_part, X_val, y_val,
+            patience=patience, min_delta=1e-6, verbose=True
+        )
+
+        print(f"✓ Training complete ({len(s.model.loss_history)} epochs / {s.epochs} max)")
         if hasattr(s.model, 'n_support_vectors'):
             print(f"  Support vectors: {s.model.n_support_vectors}")
 
@@ -346,6 +389,8 @@ def train_model_interactive(s: AppState) -> None:
                                 title=f"{s.model_type.upper()} Loss Curve")
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         print(f"✗ Training error: {e}")
         s.model = None
 
@@ -365,23 +410,31 @@ def evaluate_model_interactive(s: AppState) -> None:
 
     try:
         y_pred = s.model.predict(s.X_test)
+        
+        # Convert y_test to numeric if it contains non-numeric labels
+        y_test_num = s.y_test
+        unique_test = list(np.unique(s.y_test))
+        if not set(unique_test).issubset({0, 1, -1}):
+            # Labels are non-numeric (e.g., strings) -> convert to {0, 1}
+            y_test_num = np.where(s.y_test == unique_test[1], 1, 0).astype(int)
+        
         s.metrics = {}
 
         if s.mode == 'classifier':
             # Classification metrics
-            s.metrics['accuracy'] = accuracy(s.y_test, y_pred)
+            s.metrics['accuracy'] = accuracy(y_test_num, y_pred)
 
             # Try F1 score
             try:
-                s.metrics['f1'] = f1_score(s.y_test, y_pred)
+                s.metrics['f1'] = f1_score(y_test_num, y_pred)
             except Exception:
                 pass
 
             # Classification report
-            print(classification_report(s.y_test, y_pred))
+            print(classification_report(y_test_num, y_pred))
 
             # Confusion matrix
-            cm = confusion_matrix(s.y_test, y_pred)
+            cm = confusion_matrix(y_test_num, y_pred)
             print(f"\nConfusion Matrix:\n{cm}")
             if ask_yes_no("Show confusion matrix plot?", default=True):
                 plot_confusion_matrix(cm)

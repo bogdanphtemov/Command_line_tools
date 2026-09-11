@@ -262,6 +262,7 @@ class BaseLinearModel:
                          X_val: Optional[np.ndarray] = None,
                          y_val_for_loss: Optional[np.ndarray] = None,
                          patience: int = 50,
+                         min_delta: float = 1e-6,
                          verbose: bool = False) -> None:
         """
         Shared gradient-descent loop used by both fit() and
@@ -293,6 +294,8 @@ class BaseLinearModel:
 
         best_val_loss = float('inf')
         patience_counter = 0
+        best_w = None
+        best_b = 0.0
 
         for epoch in range(1, self.epochs + 1):
             if use_minibatch:
@@ -322,8 +325,10 @@ class BaseLinearModel:
             if early_stopping and X_val is not None:
                 val_loss = self._compute_loss(X_val, y_val_for_loss)
 
-                if val_loss < best_val_loss - 1e-8:
+                if val_loss < best_val_loss - min_delta:
                     best_val_loss = val_loss
+                    best_w = self.w.copy()
+                    best_b = self.b
                     patience_counter = 0
                 else:
                     patience_counter += 1
@@ -332,8 +337,12 @@ class BaseLinearModel:
                     print(f"Epoch {epoch}: Val Loss = {val_loss:.6f}")
 
                 if patience_counter >= patience:
+                    # Restore best weights
+                    if best_w is not None:
+                        self.w = best_w.copy()
+                        self.b = best_b
                     if verbose:
-                        print(f"Early stopping at epoch {epoch}")
+                        print(f"Early stopping at epoch {epoch}, best val loss: {best_val_loss:.6f}")
                     break
 
         self._identify_support_vectors(X, y_for_loss)
@@ -364,7 +373,7 @@ class BaseLinearModel:
 
     def fit_with_early_stopping(self, X_train: np.ndarray, y_train: np.ndarray,
                                 X_val: np.ndarray, y_val: np.ndarray,
-                                patience: int = 50,
+                                patience: int = 50, min_delta: float = 1e-6,
                                 verbose: bool = False) -> None:
         """
         Train with early stopping to prevent overfitting.
@@ -373,6 +382,7 @@ class BaseLinearModel:
             X_train, y_train: Training data
             X_val, y_val:     Validation data
             patience:         Number of epochs without improvement before stop
+            min_delta:        Minimum improvement threshold
             verbose:          Print progress
         """
         raise NotImplementedError
@@ -541,7 +551,7 @@ class LinearSVM(BaseLinearModel):
         """Identify support vectors (points with margin ≤ 1)."""
         scores = X @ self.w + self.b
         margins = y * scores
-        sv_mask = margins <= 1.0 + 1e-6
+        sv_mask = margins <= 1.0 + 1e-6,
         self.support_vectors = X[sv_mask]
         self.support_vector_labels = y[sv_mask]
         self.n_support_vectors = np.sum(sv_mask)
@@ -560,7 +570,7 @@ class LinearSVM(BaseLinearModel):
 
     def fit_with_early_stopping(self, X_train: np.ndarray, y_train: np.ndarray,
                                 X_val: np.ndarray, y_val: np.ndarray,
-                                patience: int = 50,
+                                patience: int = 50, min_delta: float = 1e-6,
                                 verbose: bool = False) -> None:
         """
         Train with early stopping to prevent overfitting.
@@ -715,7 +725,7 @@ class BaseKernelModel:
         early_stopping: bool = False,
         X_val: Optional[np.ndarray] = None,
         y_val: Optional[np.ndarray] = None,
-        patience: int = 50,
+        patience: int = 50, min_delta: float = 1e-6,
         verbose: bool = False
     ) -> None:
         """
@@ -752,6 +762,8 @@ class BaseKernelModel:
 
         best_val_loss = float('inf')
         patience_counter = 0
+        best_beta = None
+        best_b = 0.0
 
         for epoch in range(1, self.epochs + 1):
             # Forward pass
@@ -778,8 +790,10 @@ class BaseKernelModel:
                 f_val = K_val @ self.beta + self.b
                 val_loss = self._compute_val_loss(f_val, y_val)
 
-                if val_loss < best_val_loss - 1e-8:
+                if val_loss < best_val_loss - 1e-6:
                     best_val_loss = val_loss
+                    best_beta = self.beta.copy()
+                    best_b = self.b
                     patience_counter = 0
                 else:
                     patience_counter += 1
@@ -788,8 +802,12 @@ class BaseKernelModel:
                     print(f"Epoch {epoch}: Val Loss = {val_loss:.6f}")
 
                 if patience_counter >= patience:
+                    # Restore best weights
+                    if best_beta is not None:
+                        self.beta = best_beta.copy()
+                        self.b = best_b
                     if verbose:
-                        print(f"Early stopping at epoch {epoch}")
+                        print(f"Early stopping at epoch {epoch}, best val loss: {best_val_loss:.6f}")
                     break
 
         # Identify support vectors
@@ -805,7 +823,7 @@ class BaseKernelModel:
         selection if all β are near-zero.
         """
         f_final = K @ self.beta + self.b
-        sv_mask = np.abs(self.beta) > 1e-6
+        sv_mask = np.abs(self.beta) > 1e-6,
         if np.sum(sv_mask) == 0:
             # Fallback: use model-specific logic (implemented via subclass hook)
             sv_mask = self._fallback_support_vector_mask(f_final)
@@ -832,7 +850,7 @@ class BaseKernelModel:
 
     def fit_with_early_stopping(self, X_train: np.ndarray, y_train: np.ndarray,
                                 X_val: np.ndarray, y_val: np.ndarray,
-                                patience: int = 50,
+                                patience: int = 50, min_delta: float = 1e-6,
                                 verbose: bool = False) -> None:
         """Train with early stopping. Subclasses must override."""
         raise NotImplementedError
@@ -1117,7 +1135,7 @@ class KernelSVM(BaseKernelModel):
     def _fallback_support_vector_mask(self, f_final: np.ndarray) -> np.ndarray:
         """Margin-based fallback: points with margin ≤ 1 are support vectors."""
         margins = self.y_train_stored * f_final
-        return margins <= 1.0 + 1e-6
+        return margins <= 1.0 + 1e-6,
 
     def fit(self, X: np.ndarray, y: np.ndarray) -> None:
         """
@@ -1132,7 +1150,7 @@ class KernelSVM(BaseKernelModel):
 
     def fit_with_early_stopping(self, X_train: np.ndarray, y_train: np.ndarray,
                                 X_val: np.ndarray, y_val: np.ndarray,
-                                patience: int = 50,
+                                patience: int = 50, min_delta: float = 1e-6,
                                 verbose: bool = False) -> None:
         """
         Train with early stopping to prevent overfitting.
@@ -1343,7 +1361,7 @@ class OneVsRestSVM:
 
     def fit_with_early_stopping(self, X_train: np.ndarray, y_train: np.ndarray,
                                 X_val: np.ndarray, y_val: np.ndarray,
-                                patience: int = 50,
+                                patience: int = 50, min_delta: float = 1e-6,
                                 verbose: bool = False) -> None:
         """
         Train multiple binary SVMs with early stopping (One-vs-Rest).
@@ -1483,7 +1501,7 @@ class LinearSVR(BaseLinearModel):
         """Identify support vectors (outside or on tube boundary)."""
         f = X @ self.w + self.b
         residual = np.abs(y - f)
-        sv_mask = residual >= self.epsilon - 1e-6
+        sv_mask = residual >= self.epsilon - 1e-6,
         self.support_vectors = X[sv_mask]
         self.n_support_vectors = np.sum(sv_mask)
 
@@ -1499,7 +1517,7 @@ class LinearSVR(BaseLinearModel):
 
     def fit_with_early_stopping(self, X_train: np.ndarray, y_train: np.ndarray,
                                 X_val: np.ndarray, y_val: np.ndarray,
-                                patience: int = 50,
+                                patience: int = 50, min_delta: float = 1e-6,
                                 verbose: bool = False) -> None:
         """
         Train with early stopping to prevent overfitting.
@@ -1620,7 +1638,7 @@ class KernelSVR(BaseKernelModel):
 
     def _fallback_support_vector_mask(self, f_final: np.ndarray) -> np.ndarray:
         """Tube-boundary fallback: points outside/on ε-tube are support vectors."""
-        return np.abs(self.y_train_stored - f_final) >= self.epsilon - 1e-6
+        return np.abs(self.y_train_stored - f_final) >= self.epsilon - 1e-6,
 
     def get_params(self, save_training_data: bool = True) -> Dict[str, Any]:
         """Get all model parameters for saving, including epsilon."""
@@ -1648,7 +1666,7 @@ class KernelSVR(BaseKernelModel):
 
     def fit_with_early_stopping(self, X_train: np.ndarray, y_train: np.ndarray,
                                 X_val: np.ndarray, y_val: np.ndarray,
-                                patience: int = 50,
+                                patience: int = 50, min_delta: float = 1e-6,
                                 verbose: bool = False) -> None:
         """
         Train with early stopping to prevent overfitting.
