@@ -7,12 +7,13 @@ SVM classification (LinearSVM, KernelSVM) and SVR (LinearSVR, KernelSVR).
 
 import numpy as np
 import os
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 from .app_state import AppState, print_status, rebuild_split
 from .data import Dataset, Prepareddata, load_csv_dataset, manual_input_dataset
 from .core import LinearSVM, KernelSVM, LinearSVR, KernelSVR
 from .preprocessing import standardize_apply
+from .hyperparameter_optimization import fast_auto_optimize
 from .metrics import (
     accuracy, f1_score,
     classification_report, confusion_matrix,
@@ -68,10 +69,10 @@ def select_features_and_target_binary(dataset: Dataset, mode: str = 'classifier'
                 f"Binary SVM requires exactly 2 classes, found {len(unique_values)}. "
                 f"For multiclass, use Multiclass SVM."
             )
-        print(f"\n✓ Binary classification: classes = {sorted(unique_values.tolist())}")
+        print(f"\nâœ“ Binary classification: classes = {sorted(unique_values.tolist())}")
         print(f"  Class distribution: {dict(zip(*np.unique(prepared.Y, return_counts=True)))}")
     else:
-        print(f"\n✓ Regression target selected: {prepared.Y.shape[0]} samples")
+        print(f"\nâœ“ Regression target selected: {prepared.Y.shape[0]} samples")
         print(f"  Range: [{prepared.Y.min():.4f}, {prepared.Y.max():.4f}]")
 
     return prepared
@@ -95,11 +96,22 @@ def configure_common_hyperparameters(mode: str = 'classifier') -> dict:
     lr = ask_auto_or_float("Learning rate", min_val=0.0001, max_val=1.0)
     epochs = ask_int("Max epochs", min_val=100, max_val=100000, default=10000)
 
+    # Epsilon with auto option for regression
+    epsilon_auto = False
+    epsilon_value = 0.1
+    if mode == 'regressor':
+        from myclt.common.input_validation import ask_epsilon_with_auto
+        epsilon_input = ask_epsilon_with_auto("Epsilon (Îµ-insensitive tube, 0.001-1.0)")
+        epsilon_auto = (epsilon_input is None)
+        epsilon_value = epsilon_input or 0.1
+
     print("\n" + "=" * 70)
     print("Configuration Summary:")
     print(f"  C: {'AUTO' if C is None else C}")
     print(f"  Learning rate: {'AUTO' if lr is None else lr}")
     print(f"  Max epochs: {epochs}")
+    if mode == 'regressor':
+        print(f"  Epsilon: {'AUTO' if epsilon_auto else epsilon_value}")
     print(f"  Early stopping: ON")
     print("=" * 70)
 
@@ -107,31 +119,36 @@ def configure_common_hyperparameters(mode: str = 'classifier') -> dict:
         'C': C,
         'learning_rate': lr,
         'epochs': epochs,
+        'C_auto': (C is None),
+        'learning_rate_auto': (lr is None),
     }
 
     if mode == 'regressor':
-        epsilon = ask_float("Epsilon (ε-insensitive tube, 0.001-1.0, default=0.1)",
-                            min_val=0.001, max_val=1.0, default=0.1)
-        params['epsilon'] = epsilon
+        params['epsilon'] = epsilon_value
+        params['epsilon_auto'] = epsilon_auto
 
     return params
 
 
-def configure_kernel_hyperparameters() -> dict:
+def configure_kernel_hyperparameters_with_auto() -> dict | None:
     """
-    Interactive kernel hyperparameter configuration.
+    Interactive kernel hyperparameter configuration with auto optimization option.
 
     Returns:
-        Dictionary with kernel parameters (kernel, gamma, degree, coef0)
+        Dictionary with kernel parameters or None for auto optimization
     """
+    from myclt.common.input_validation import ask_kernel_with_auto
+    
+    kernel_choice = ask_kernel_with_auto()
+    
+    if kernel_choice is None:
+        return None  # Auto optimization
+    
     print("\n" + "=" * 70)
     print("KERNEL CONFIGURATION")
     print("=" * 70)
 
-    kernel_options = ['rbf', 'linear', 'poly', 'sigmoid']
-    kernel_idx = ask_choice("Select kernel:", kernel_options)
-    kernel = kernel_options[kernel_idx]
-
+    kernel = kernel_choice
     kwargs = {'kernel': kernel}
 
     if kernel in ('rbf', 'poly', 'sigmoid'):
@@ -154,6 +171,28 @@ def configure_kernel_hyperparameters() -> dict:
 
     print(f"\nKernel config: {kwargs}")
     return kwargs
+
+
+def configure_kernel_hyperparameters() -> dict:
+    """
+    Interactive kernel hyperparameter configuration.
+    
+    This is the original function kept for backward compatibility.
+    Use configure_kernel_hyperparameters_with_auto() for new features.
+    
+    Returns:
+        Dictionary with kernel parameters (kernel, gamma, degree, coef0)
+    """
+    auto_result = configure_kernel_hyperparameters_with_auto()
+    if auto_result is None:
+        # If auto was selected, use default parameters
+        return {
+            'kernel': 'rbf',
+            'gamma': 1.0,
+            'degree': 3,
+            'coef0': 0.0
+        }
+    return auto_result
 
 
 def show_prediction_example(feature_names: List[str]) -> np.ndarray:
@@ -205,38 +244,38 @@ def load_data_interactive(s: AppState) -> None:
         path = input("\nCSV path: ").strip()
         try:
             s.dataset = load_csv_dataset(path)
-            print(f"✓ Loaded: {s.dataset.data.shape[0]} rows × {s.dataset.data.shape[1]} columns")
+            print(f"âœ“ Loaded: {s.dataset.data.shape[0]} rows Ã— {s.dataset.data.shape[1]} columns")
         except FileNotFoundError as e:
-            print(f"✗ Error: {e}")
+            print(f"âœ— Error: {e}")
     else:
         try:
             s.dataset = manual_input_dataset()
-            print(f"✓ Created: {s.dataset.data.shape[0]} rows × {s.dataset.data.shape[1]} columns")
+            print(f"âœ“ Created: {s.dataset.data.shape[0]} rows Ã— {s.dataset.data.shape[1]} columns")
         except ValueError as e:
-            print(f"✗ Error: {e}")
+            print(f"âœ— Error: {e}")
     pause()
 
 
 def select_features_interactive(s: AppState) -> None:
     """Select features and target interactively."""
     if s.dataset is None:
-        print("✗ No dataset loaded yet!")
+        print("âœ— No dataset loaded yet!")
         pause()
         return
     try:
         s.prepareddata = select_features_and_target_binary(s.dataset, s.mode)
         rebuild_split(s)
-        print("✓ Features and target selected")
+        print("âœ“ Features and target selected")
         pause()
     except ValueError as e:
-        print(f"✗ Error: {e}")
+        print(f"âœ— Error: {e}")
         pause()
 
 
 def configure_split_interactive(s: AppState) -> None:
     """Configure train/test split."""
     if s.dataset is None:
-        print("✗ No dataset loaded yet!")
+        print("âœ— No dataset loaded yet!")
         return
     print("\n" + "=" * 70)
     print("CONFIGURE TRAIN/TEST SPLIT")
@@ -245,7 +284,7 @@ def configure_split_interactive(s: AppState) -> None:
     s.seed = ask_int("Random seed (integer)", min_val=0, max_val=10000, default=42)
     s.use_scaling = ask_yes_no_recommended("Use feature scaling (standardization)?", recommended=True)
     rebuild_split(s)
-    print("✓ Split configuration updated")
+    print("âœ“ Split configuration updated")
     pause()
 
 
@@ -278,21 +317,83 @@ def configure_model_interactive(s: AppState) -> None:
     if s.mode == 'regressor' and 'epsilon' in common:
         s.epsilon = common['epsilon']
 
-    # Kernel params (if applicable)
+    # Kernel params (if applicable) with auto option
     if s.model_type in ("kernel_svm", "kernel_svr"):
-        kernel_params = configure_kernel_hyperparameters()
-        s.kernel = kernel_params.get('kernel', 'rbf')
-        s.gamma = kernel_params.get('gamma', 1.0)
-        s.degree = kernel_params.get('degree', 3)
-        s.coef0 = kernel_params.get('coef0', 1.0)
+        kernel_params = configure_kernel_hyperparameters_with_auto()
+        if kernel_params is None:
+            # Auto optimization selected
+            s.kernel_auto = True
+            s.kernel = 'rbf'  # Default until optimized
+            s.gamma = 1.0
+            s.degree = 3
+            s.coef0 = 0.0
+        else:
+            # Manual configuration
+            s.kernel_auto = False
+            s.kernel = kernel_params.get('kernel', 'rbf')
+            s.gamma = kernel_params.get('gamma', 1.0)
+            s.degree = kernel_params.get('degree', 3)
+            s.coef0 = kernel_params.get('coef0', 1.0)
 
-    print("✓ Model configured")
+    print("âœ“ Model configured")
+
+
+def auto_optimize_all_params(s: AppState) -> Dict[str, Any]:
+    """Optimize all parameters using our fast optimization algorithm."""
+    print("\n" + "=" * 70)
+    print("ðŸš€ FAST AUTOMATIC OPTIMIZATION")
+    print("=" * 70)
+    
+    # Ask for time limit
+    from myclt.common.input_validation import ask_int
+    max_minutes = ask_int("Maximum optimization time (minutes)", 
+                         min_val=5, max_val=120, default=15)
+    
+    print(f"\n>> Starting fast optimization (max {max_minutes} minutes)...")
+    print(">> Using 3-stage adaptive sampling for best results")
+    
+    # Use our fast optimizer
+    optimized_params = fast_auto_optimize(
+        X=s.X_train, 
+        y=s.y_train,
+        mode=s.mode,
+        max_time_minutes=max_minutes
+    )
+    
+    # Update app state with optimized parameters
+    if optimized_params:
+        s.C = optimized_params.get('C', s.C)
+        s.learning_rate = optimized_params.get('learning_rate', s.learning_rate)
+        
+        # For kernel models
+        if hasattr(s, 'kernel') and 'kernel' in optimized_params:
+            s.kernel = optimized_params['kernel']
+        if hasattr(s, 'gamma') and 'gamma' in optimized_params:
+            s.gamma = optimized_params['gamma']
+        if hasattr(s, 'epsilon') and 'epsilon' in optimized_params:
+            s.epsilon = optimized_params['epsilon']
+        
+        print("\n" + "=" * 70)
+        print("âœ… OPTIMIZATION COMPLETE")
+        print("=" * 70)
+        metric_name = 'RÂ² Score' if s.mode == 'regressor' else 'Accuracy'
+        metric_value = optimized_params.get('score', -float('inf'))
+        print(f"Best {metric_name}: {metric_value:.4f}")
+        print(f"Target: {'â‰¥ 0.80' if s.mode == 'regressor' else 'â‰¥ 0.85'}")
+        print(f"Optimal Parameters:")
+        for key, value in optimized_params.items():
+            if key != 'score':
+                print(f"  {key}: {value}")
+        
+        return optimized_params
+    
+    return None
 
 
 def train_model_interactive(s: AppState) -> None:
     """Train SVM model interactively with auto-tuning."""
     if s.X_train is None or s.y_train is None:
-        print("✗ No training data prepared yet!")
+        print("âœ— No training data prepared yet!")
         return
 
     print("\n" + "=" * 70)
@@ -300,8 +401,31 @@ def train_model_interactive(s: AppState) -> None:
     print("=" * 70)
 
     try:
-        # Auto-tune learning rate if needed
-        if s.learning_rate_auto:
+        # First check if we should use fast optimization (works for both regression and classification)
+        auto_mode = False
+        
+        # Debug info
+        print(f"DEBUG: learning_rate_auto={s.learning_rate_auto}")
+        print(f"DEBUG: C_auto={s.C_auto}")
+        print(f"DEBUG: kernel_auto={getattr(s, 'kernel_auto', False)}")
+        print(f"DEBUG: mode={s.mode}")
+        
+        if (s.learning_rate_auto and s.C_auto and 
+            (s.mode == 'regressor' or s.mode == 'classifier') and
+            (hasattr(s, 'kernel_auto') and s.kernel_auto)):
+            
+            from myclt.common.input_validation import ask_yes_no
+            auto_mode = ask_yes_no("Use fast automatic optimization (3-stage)?", default=True)
+            
+            if auto_mode:
+                optimized_params = auto_optimize_all_params(s)
+                if optimized_params:
+                    # Skip individual tuning since we have all optimized params
+                    s.learning_rate_auto = False
+                    s.C_auto = False
+        
+        # Auto-tune learning rate if needed (and not done by fast optimization)
+        if s.learning_rate_auto and not auto_mode:
             from .hyperparameter_tuning import auto_tune_learning_rate
             model_class = LinearSVM if s.model_type == 'linear_svm' else (
                 KernelSVM if s.model_type == 'kernel_svm' else (
@@ -312,7 +436,7 @@ def train_model_interactive(s: AppState) -> None:
             lr_result = auto_tune_learning_rate(
                 X=s.X_train, y=s.y_train,
                 model_class=model_class, C=s.C,
-                max_epochs=s.epochs, k_folds=3, seed=s.seed,
+                max_epochs=2000, k_folds=3, seed=s.seed,  # Reduced for faster testing
                 use_scaling=False, task=task, verbose=True
             )
             s.learning_rate = lr_result['best_lr']
@@ -330,11 +454,56 @@ def train_model_interactive(s: AppState) -> None:
             C_result = auto_tune_C(
                 X=s.X_train, y=s.y_train,
                 model_class=model_class, learning_rate=s.learning_rate,
-                max_epochs=s.epochs, k_folds=3, seed=s.seed,
+                max_epochs=2000, k_folds=3, seed=s.seed,  # Reduced for faster testing
                 use_scaling=False, task=task, verbose=True
             )
             s.C = C_result['best_C']
             print(f"\n=> C set to: {s.C}")
+
+        # Auto-tune kernel and epsilon if needed (kernel-based models and SVR)
+        if hasattr(s, 'kernel_auto') and s.kernel_auto:
+            # Use new auto optimization for kernel parameters
+            print("\nðŸ”§ Starting automatic kernel optimization...")
+            from .hyperparameter_optimization import auto_optimize_parameters
+            
+            # Create temporary dataset for optimization
+            class TempPreparedData:
+                def __init__(self, X, y):
+                    self.X = X
+                    self.y = y
+            
+            temp_data = TempPreparedData(s.X_train, s.y_train)
+            
+            # Run optimization
+            optimized_params = auto_optimize_parameters(
+                temp_data, mode=s.mode, max_time_minutes=8
+            )
+            
+            # Apply optimized parameters
+            s.kernel = optimized_params['kernel']
+            s.gamma = optimized_params['gamma']
+            s.degree = optimized_params['degree']
+            s.coef0 = optimized_params['coef0']
+            if s.mode == 'regressor':
+                s.epsilon = optimized_params['epsilon']
+            
+            print("âœ“ Kernel and parameters optimized")
+        elif s.mode == 'regressor' and hasattr(s, 'epsilon_auto') and s.epsilon_auto:
+            # Auto-tune only epsilon for SVR
+            print("\nðŸ”§ Starting automatic epsilon optimization...")
+            from .hyperparameter_optimization import SVMHyperparameterOptimizer
+            
+            # Create validation split
+            from myclt.ML.base_models import train_test_split
+            X_train, X_val, y_train, y_val = train_test_split(
+                s.X_train, s.y_train, test_size=0.2, seed=s.seed
+            )
+            
+            optimizer = SVMHyperparameterOptimizer(max_time_minutes=3)
+            s.epsilon = optimizer.optimize_epsilon_param(
+                X_train, y_train, X_val, y_val, s.mode
+            )
+            print(f"âœ“ Epsilon optimized to: {s.epsilon}")
 
         # Create model based on type
         if s.model_type == "linear_svm":
@@ -375,7 +544,7 @@ def train_model_interactive(s: AppState) -> None:
             patience=patience, min_delta=1e-6, verbose=True
         )
 
-        print(f"✓ Training complete ({len(s.model.loss_history)} epochs / {s.epochs} max)")
+        print(f"âœ“ Training complete ({len(s.model.loss_history)} epochs / {s.epochs} max)")
         if hasattr(s.model, 'n_support_vectors'):
             print(f"  Support vectors: {s.model.n_support_vectors}")
 
@@ -385,23 +554,23 @@ def train_model_interactive(s: AppState) -> None:
                 plot_loss_curve(s.model.loss_history, ylabel="Hinge Loss",
                                 title=f"{s.model_type.upper()} Loss Curve")
             else:
-                plot_loss_curve(s.model.loss_history, ylabel="ε-Insensitive Loss",
+                plot_loss_curve(s.model.loss_history, ylabel="Îµ-Insensitive Loss",
                                 title=f"{s.model_type.upper()} Loss Curve")
 
     except Exception as e:
         import traceback
         traceback.print_exc()
-        print(f"✗ Training error: {e}")
+        print(f"âœ— Training error: {e}")
         s.model = None
 
 
 def evaluate_model_interactive(s: AppState) -> None:
     """Evaluate model interactively."""
     if s.model is None or not s.model.is_trained:
-        print("✗ No trained model!")
+        print("âœ— No trained model!")
         return
     if s.X_test is None or s.y_test is None:
-        print("✗ No test data!")
+        print("âœ— No test data!")
         return
 
     print("\n" + "=" * 70)
@@ -470,24 +639,24 @@ def evaluate_model_interactive(s: AppState) -> None:
 
             # Epsilon tube (if SVR and 1D feature)
             if s.model_type in ("linear_svr", "kernel_svr") and s.X_test.shape[1] == 1:
-                if ask_yes_no("Show ε-tube visualization?", default=False):
+                if ask_yes_no("Show Îµ-tube visualization?", default=False):
                     plot_svr_tube(s.X_test, s.y_test, y_pred,
                                   epsilon=s.epsilon,
                                   feature_idx=0)
 
-        print("✓ Evaluation complete")
+        print("âœ“ Evaluation complete")
 
     except Exception as e:
-        print(f"✗ Evaluation error: {e}")
+        print(f"âœ— Evaluation error: {e}")
 
 
 def predict_single_interactive(s: AppState) -> None:
     """Make a single prediction."""
     if s.model is None or not s.model.is_trained:
-        print("✗ No trained model!")
+        print("âœ— No trained model!")
         return
     if s.prepareddata is None:
-        print("✗ No feature names available!")
+        print("âœ— No feature names available!")
         return
 
     try:
@@ -521,7 +690,7 @@ def predict_single_interactive(s: AppState) -> None:
         print("=" * 70 + "\n")
 
     except Exception as e:
-        print(f"✗ Prediction error: {e}")
+        print(f"âœ— Prediction error: {e}")
 
 
 # ============================================================================
@@ -532,7 +701,7 @@ def menu_data(s: AppState) -> None:
     """Data menu."""
     while True:
         clear_screen()
-        print_header(f"SVM — Data ({'Classification' if s.mode == 'classifier' else 'Regression'})")
+        print_header(f"SVM â€” Data ({'Classification' if s.mode == 'classifier' else 'Regression'})")
         print_status(s)
         options = ["Load dataset (CSV / Manual)",
                     "Select features + target", "Configure train/test split",
@@ -552,7 +721,7 @@ def menu_train(s: AppState) -> None:
     """Train menu."""
     while True:
         clear_screen()
-        print_header("SVM — Train")
+        print_header("SVM â€” Train")
         print_status(s)
         options = ["Configure model", "Train model", "Back"]
         choice = ask_choice("", options)
@@ -570,7 +739,7 @@ def menu_evaluate(s: AppState) -> None:
     """Evaluate menu."""
     while True:
         clear_screen()
-        print_header("SVM — Evaluate")
+        print_header("SVM â€” Evaluate")
         print_status(s)
         options = ["Evaluate on test set",
                     f"Explain {'classification' if s.mode == 'classifier' else 'regression'} metrics",
@@ -582,64 +751,64 @@ def menu_evaluate(s: AppState) -> None:
         elif choice == 1:
             clear_screen()
             if s.mode == 'classifier':
-                print_header("SVM Classification — Metrics Explained")
+                print_header("SVM Classification â€” Metrics Explained")
                 print("\nACCURACY:")
-                print("─" * 70)
-                print("  • What: Percentage of correct predictions")
-                print("  • Formula: correct / total")
+                print("â”€" * 70)
+                print("  â€¢ What: Percentage of correct predictions")
+                print("  â€¢ Formula: correct / total")
 
                 print("\nPRECISION:")
-                print("─" * 70)
-                print("  • What: Of predicted positives, how many are correct")
-                print("  • Formula: TP / (TP + FP)")
+                print("â”€" * 70)
+                print("  â€¢ What: Of predicted positives, how many are correct")
+                print("  â€¢ Formula: TP / (TP + FP)")
 
                 print("\nRECALL:")
-                print("─" * 70)
-                print("  • What: Of actual positives, how many were found")
-                print("  • Formula: TP / (TP + FN)")
+                print("â”€" * 70)
+                print("  â€¢ What: Of actual positives, how many were found")
+                print("  â€¢ Formula: TP / (TP + FN)")
 
                 print("\nF1 SCORE:")
-                print("─" * 70)
-                print("  • Harmonic mean of precision and recall")
-                print("  • Formula: 2 × P × R / (P + R)")
+                print("â”€" * 70)
+                print("  â€¢ Harmonic mean of precision and recall")
+                print("  â€¢ Formula: 2 Ã— P Ã— R / (P + R)")
 
                 print("\nCONFUSION MATRIX:")
-                print("─" * 70)
-                print("  • [[TN, FP], [FN, TP]]")
-                print("  • Diagonal = correct, off-diagonal = errors")
+                print("â”€" * 70)
+                print("  â€¢ [[TN, FP], [FN, TP]]")
+                print("  â€¢ Diagonal = correct, off-diagonal = errors")
 
                 print("\nSUPPORT VECTORS:")
-                print("─" * 70)
-                print("  • Data points that determine the decision boundary")
-                print("  • Points with margin ≤ 1")
-                print("  • Only SVs affect the model (sparsity!)")
+                print("â”€" * 70)
+                print("  â€¢ Data points that determine the decision boundary")
+                print("  â€¢ Points with margin â‰¤ 1")
+                print("  â€¢ Only SVs affect the model (sparsity!)")
             else:
-                print_header("SVR Regression — Metrics Explained")
+                print_header("SVR Regression â€” Metrics Explained")
                 print("\nMSE (Mean Squared Error):")
-                print("─" * 70)
-                print("  • Average squared difference between true and predicted")
-                print("  • Penalizes large errors more")
+                print("â”€" * 70)
+                print("  â€¢ Average squared difference between true and predicted")
+                print("  â€¢ Penalizes large errors more")
 
                 print("\nRMSE (Root Mean Squared Error):")
-                print("─" * 70)
-                print("  • Square root of MSE")
-                print("  • Same units as target variable")
+                print("â”€" * 70)
+                print("  â€¢ Square root of MSE")
+                print("  â€¢ Same units as target variable")
 
                 print("\nMAE (Mean Absolute Error):")
-                print("─" * 70)
-                print("  • Average absolute difference")
-                print("  • Less sensitive to outliers than MSE")
+                print("â”€" * 70)
+                print("  â€¢ Average absolute difference")
+                print("  â€¢ Less sensitive to outliers than MSE")
 
-                print("\nR² (Coefficient of Determination):")
-                print("─" * 70)
-                print("  • How well the model explains variance")
-                print("  • 1.0 = perfect, 0.0 = mean predictor, < 0 = worse than mean")
+                print("\nRÂ² (Coefficient of Determination):")
+                print("â”€" * 70)
+                print("  â€¢ How well the model explains variance")
+                print("  â€¢ 1.0 = perfect, 0.0 = mean predictor, < 0 = worse than mean")
 
-                print("\nε-INSENSITIVE TUBE:")
-                print("─" * 70)
-                print("  • Errors within ±ε are ignored")
-                print("  • Points outside the tube = support vectors")
-                print("  • Controls sparsity of the solution")
+                print("\nÎµ-INSENSITIVE TUBE:")
+                print("â”€" * 70)
+                print("  â€¢ Errors within Â±Îµ are ignored")
+                print("  â€¢ Points outside the tube = support vectors")
+                print("  â€¢ Controls sparsity of the solution")
             pause()
         else:
             return
@@ -663,7 +832,7 @@ def menu_save_load(s: AppState) -> None:
 
     while True:
         clear_screen()
-        print_header(f"SVM — Save/Load Session ({'Classifier' if s.mode == 'classifier' else 'Regression'})")
+        print_header(f"SVM â€” Save/Load Session ({'Classifier' if s.mode == 'classifier' else 'Regression'})")
         print_status(s)
 
         options = ["Save complete session", "Load session",
@@ -690,7 +859,7 @@ def menu_save_load(s: AppState) -> None:
                 session_data, arrays_dict = adapter.extract(s)
                 session_dir = f"./ml_sessions/{session_name}"
                 storage.save_session(session_data, session_dir, arrays_dict, verbose=True)
-                print(f"\n✓ Session '{session_name}' saved!")
+                print(f"\nâœ“ Session '{session_name}' saved!")
             except Exception as e:
                 print(f"!Error saving: {e}!")
             pause()
@@ -715,7 +884,7 @@ def menu_save_load(s: AppState) -> None:
                 # Determine which adapter to use based on stored algorithm_name
                 adapter.restore(session_data, arrays_dict, s)
 
-                print(f"\n✓ Session '{session_name}' loaded!")
+                print(f"\nâœ“ Session '{session_name}' loaded!")
                 if s.metrics:
                     metrics_str = ", ".join(f"{k}={v:.4f}" for k, v in s.metrics.items())
                     print(f"  Metrics: {metrics_str}")
@@ -734,7 +903,7 @@ def menu_save_load(s: AppState) -> None:
                     try:
                         _, arrays = storage.load_session(session_dir, verbose=False)
                         ds_shape = arrays.get("dataset", np.array([])).shape
-                        print(f" ✓ {name} (dataset: {ds_shape})")
+                        print(f" âœ“ {name} (dataset: {ds_shape})")
                     except:
                         print(f" ? {name} (corrupted)")
             pause()
@@ -764,7 +933,7 @@ def menu_predict(s: AppState) -> None:
     """Predict menu."""
     while True:
         clear_screen()
-        print_header("SVM — Predict")
+        print_header("SVM â€” Predict")
         print_status(s)
         options = ["Make a single prediction",
                     "Batch predict from CSV file", "Back"]
@@ -774,17 +943,17 @@ def menu_predict(s: AppState) -> None:
             pause()
         elif choice == 1:
             if s.model is None or not s.model.is_trained:
-                print("✗ Model not trained!")
+                print("âœ— Model not trained!")
                 pause()
                 continue
             if s.prepareddata is None:
-                print("✗ No features selected!")
+                print("âœ— No features selected!")
                 pause()
                 continue
 
             csv_path = input("\nCSV path: ").strip()
             if not csv_path:
-                print("✗ Invalid path!")
+                print("âœ— Invalid path!")
                 pause()
                 continue
 
@@ -804,10 +973,10 @@ def menu_predict(s: AppState) -> None:
                     output_path=output_csv,
                     model_type=model_type,
                 )
-                print(f"\n  ✓ Processed {result['n_samples']} rows!")
-                print(f"  ✓ Output: {result['output_path']}")
+                print(f"\n  âœ“ Processed {result['n_samples']} rows!")
+                print(f"  âœ“ Output: {result['output_path']}")
             except Exception as e:
-                print(f"\n  ✗ Error: {e}")
+                print(f"\n  âœ— Error: {e}")
             pause()
         else:
             return
@@ -817,7 +986,7 @@ def menu_visualize(s: AppState) -> None:
     """Visualize menu."""
     while True:
         clear_screen()
-        print_header("SVM — Visualize")
+        print_header("SVM â€” Visualize")
         print_status(s)
         options = [
             "Plot loss curve",
@@ -831,18 +1000,18 @@ def menu_visualize(s: AppState) -> None:
         choice = ask_choice("", options)
         if choice == 0:
             if s.model is None or not s.model.loss_history:
-                print("✗ No loss history!")
+                print("âœ— No loss history!")
                 pause()
                 continue
             plot_loss_curve(s.model.loss_history)
             pause()
         elif choice == 1:
             if s.model is None or not s.model.is_trained:
-                print("✗ No trained model!")
+                print("âœ— No trained model!")
                 pause()
                 continue
             if s.X_test is None or s.X_test.shape[1] != 2:
-                print("✗ Need exactly 2 features!")
+                print("âœ— Need exactly 2 features!")
                 pause()
                 continue
             plot_svm_decision_boundary_2d(
@@ -852,11 +1021,11 @@ def menu_visualize(s: AppState) -> None:
             pause()
         elif choice == 2:
             if s.model is None or s.mode != 'classifier':
-                print("✗ Need trained classifier!")
+                print("âœ— Need trained classifier!")
                 pause()
                 continue
             if s.X_test is None or s.y_test is None:
-                print("✗ No test data!")
+                print("âœ— No test data!")
                 pause()
                 continue
             y_pred = s.model.predict(s.X_test)
@@ -865,11 +1034,11 @@ def menu_visualize(s: AppState) -> None:
             pause()
         elif choice == 3:
             if s.model is None or s.mode != 'regressor':
-                print("✗ Need trained regressor!")
+                print("âœ— Need trained regressor!")
                 pause()
                 continue
             if s.X_test is None or s.y_test is None:
-                print("✗ No test data!")
+                print("âœ— No test data!")
                 pause()
                 continue
             y_pred = s.model.predict(s.X_test)
@@ -877,11 +1046,11 @@ def menu_visualize(s: AppState) -> None:
             pause()
         elif choice == 4:
             if s.model is None or s.mode != 'regressor':
-                print("✗ Need trained regressor!")
+                print("âœ— Need trained regressor!")
                 pause()
                 continue
             if s.X_test is None or s.y_test is None:
-                print("✗ No test data!")
+                print("âœ— No test data!")
                 pause()
                 continue
             y_pred = s.model.predict(s.X_test)
@@ -889,7 +1058,7 @@ def menu_visualize(s: AppState) -> None:
             pause()
         elif choice == 5:
             if s.model is None or not s.model.is_trained:
-                print("✗ No trained model!")
+                print("âœ— No trained model!")
                 pause()
                 continue
             plot_support_vector_info(s.model)

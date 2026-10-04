@@ -150,7 +150,11 @@ def _evaluate_params_cv(X: np.ndarray, y: np.ndarray,
 
             # Evaluate
             y_pred = model.predict(X_test_scaled)
-            score = -mean_squared_error(y_test, y_pred)
+            if task == 'regressor':
+                from .metrics import r2_score
+                score = r2_score(y_test, y_pred)
+            else:
+                score = -mean_squared_error(y_test, y_pred)  # Keep negative MSE for classification
             fold_scores.append(score)
 
     if verbose:
@@ -162,7 +166,7 @@ def _evaluate_params_cv(X: np.ndarray, y: np.ndarray,
 def _print_results(best_params: Dict[str, Any], best_score: float,
                    task: str, search_type: str = "SEARCH") -> None:
     """Print formatted search results."""
-    metric = 'F1' if task == 'classifier' else '(neg) MSE'
+    metric = 'F1' if task == 'classifier' else 'RÂ²'
     print(f"{'=' * 70}")
     print(f"Best params: {best_params}")
     print(f"Best {metric}: {best_score:.6f}")
@@ -231,7 +235,7 @@ def grid_search_cv(X: np.ndarray, y: np.ndarray,
             best_params = params.copy()
 
         if verbose and combo_idx % max(1, total_combinations // 10 + 1) == 0:
-            metric = 'F1' if task == 'classifier' else '(neg) MSE'
+            metric = 'F1' if task == 'classifier' else 'RÂ²'
             print(f"  Progress: {combo_idx}/{total_combinations} | Best {metric}: {best_score:.6f}")
 
     if verbose:
