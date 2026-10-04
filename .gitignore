@@ -90,3 +90,10 @@ ml_sessions/
 
 # Temporary directories
 tmp/
+
+# Package manager files
+uv.lock
+
+# Test files (temporary)
+test_ui_classification_fast.py
+test_classification_optimization.py
