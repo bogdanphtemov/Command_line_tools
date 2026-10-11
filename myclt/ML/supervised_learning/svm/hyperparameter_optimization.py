@@ -2,7 +2,7 @@
 Hyperparameter optimization for SVM models.
 
 Provides automatic parameter search with time constraints and performance metrics.
-Designed to achieve R┬▓ ΓëÑ 0.80 within 10 minutes for regression tasks.
+Designed to achieve R² ≥ 0.80 within 10 minutes for regression tasks.
 """
 
 import time
@@ -59,15 +59,15 @@ class SVMHyperparameterOptimizer:
                 if r2 > best_r2:
                     best_r2 = r2
                     best_epsilon = eps
-                    print(f"╬╡={eps}: R┬▓={r2:.4f} Γ£ô")
+                    print(f"ε={eps}: R²={r2:.4f} ✓")
                 else:
-                    print(f"╬╡={eps}: R┬▓={r2:.4f}")
+                    print(f"ε={eps}: R²={r2:.4f}")
                     
             except Exception as e:
-                print(f"╬╡={eps}: Error - {e}")
+                print(f"ε={eps}: Error - {e}")
                 continue
         
-        print(f"\nBest ╬╡: {best_epsilon} (R┬▓={best_r2:.4f})")
+        print(f"\nBest ε: {best_epsilon} (R²={best_r2:.4f})")
         return best_epsilon
     
     def optimize_kernel_selection(self, X_train: np.ndarray, y_train: np.ndarray,
@@ -120,7 +120,7 @@ class SVMHyperparameterOptimizer:
                             'degree': 3,
                             'coef0': 0.0
                         }
-                        print(f"Kernel {kernel}, gamma: {gamma}: Score={score:.4f} Γ£ô")
+                        print(f"Kernel {kernel}, gamma: {gamma}: Score={score:.4f} ✓")
                     else:
                         print(f"Kernel {kernel}, gamma: {gamma}: Score={score:.4f}")
                         
@@ -154,7 +154,7 @@ class SVMHyperparameterOptimizer:
         print("STARTING AUTOMATIC PARAMETER OPTIMIZATION")
         print("=" * 60)
         print(f"Time limit: {self.max_time_minutes} minutes")
-        print("Target: R┬▓ ΓëÑ 0.80 for regression\n")
+        print("Target: R² ≥ 0.80 for regression\n")
         
         start_time = time.time()
         
@@ -175,7 +175,7 @@ class SVMHyperparameterOptimizer:
         # Optimize epsilon for regression
         epsilon = 0.1
         if mode == 'regressor':
-            print("\n2. OPTIMIZING EPSILON (╬╡)")
+            print("\n2. OPTIMIZING EPSILON (ε)")
             epsilon = self.optimize_epsilon_param(X_train, y_train, X_val, y_val, mode)
         
         # Before C optimization, standardize the data
@@ -230,7 +230,7 @@ class SVMHyperparameterOptimizer:
                 if score > best_final_score:
                     best_final_score = score
                     best_C = C
-                    print(f"C={C}: Score={score:.4f} Γ£ô")
+                    print(f"C={C}: Score={score:.4f} ✓")
                 else:
                     print(f"C={C}: Score={score:.4f}")
                     
@@ -258,9 +258,9 @@ class SVMHyperparameterOptimizer:
         print(f"Best score: {best_final_score:.4f}")
         
         if mode == 'regressor' and best_final_score >= 0.80:
-            print("≡ƒÄ» TARGET ACHIEVED: R┬▓ ΓëÑ 0.80")
+            print("🎯 TARGET ACHIEVED: R² ≥ 0.80")
         elif mode == 'regressor':
-            print("ΓÜá∩╕Å  TARGET NOT MET: Consider increasing time limit or reducing data size")
+            print("⚠️  TARGET NOT MET: Consider increasing time limit or reducing data size")
         
         return final_params
 
@@ -359,7 +359,7 @@ class FastSVMHyperparameterOptimizer:
         # Check Stage 1 results
         target_threshold = self.target_r2 if mode == 'regressor' else self.target_accuracy
         if stage1_params.get('score', -float('inf')) >= target_threshold:
-            metric = 'R┬▓' if mode == 'regressor' else 'Accuracy'
+            metric = 'R²' if mode == 'regressor' else 'Accuracy'
             print(f">> TARGET ACHIEVED in Stage 1! {metric} = {stage1_params['score']:.4f}")
             return stage1_params
         
@@ -386,7 +386,7 @@ class FastSVMHyperparameterOptimizer:
             
             # Check Stage 2 target
             if best_params.get('score', -float('inf')) >= self.target_r2:
-                print(f">> TARGET ACHIEVED in Stage 2! R┬▓ = {best_params['score']:.4f}")
+                print(f">> TARGET ACHIEVED in Stage 2! R² = {best_params['score']:.4f}")
                 return best_params
         
         # Stage 3: Final Refinement (remaining time)
@@ -397,19 +397,19 @@ class FastSVMHyperparameterOptimizer:
         
         # Final check
         if final_params.get('score', -float('inf')) >= self.target_r2:
-            print(f">> TARGET ACHIEVED in Stage 3! R┬▓ = {final_params['score']:.4f}")
+            print(f">> TARGET ACHIEVED in Stage 3! R² = {final_params['score']:.4f}")
         else:
-            print(f">> FINAL RESULT: R┬▓ = {final_params.get('score', -float('inf')):.4f}")
+            print(f">> FINAL RESULT: R² = {final_params.get('score', -float('inf')):.4f}")
         
         return final_params
 
     def _improved_quick_screening(self, X: np.ndarray, y: np.ndarray, mode: str,
                                  start_time: float) -> Dict[str, Any]:
-        """Improved Stage 1: Fast screening with R┬▓ scoring."""
+        """Improved Stage 1: Fast screening with R² scoring."""
         from .hyperparameter_tuning import grid_search_cv
         from .metrics import r2_score
         
-        metric = 'Accuracy' if mode == 'classifier' else 'R┬▓'
+        metric = 'Accuracy' if mode == 'classifier' else 'R²'
         print(f">> Stage 1: Fast screening with {metric} scoring...")
         
         # Smart parameter grid for quick screening - adapted for classification/regression
@@ -435,9 +435,9 @@ class FastSVMHyperparameterOptimizer:
                 verbose=False
             )
             
-            # Convert negative MSE to R┬▓ approximation
-            # For regression: R┬▓ = 1 - MSE/Var(y), but with negative MSE we need different approach
-            # Let's manually calculate R┬▓ for final validation
+            # Convert negative MSE to R² approximation
+            # For regression: R² = 1 - MSE/Var(y), but with negative MSE we need different approach
+            # Let's manually calculate R² for final validation
             from .preprocessing import train_test_split, standardize_fit, standardize_apply
             
             # Quick validation with best parameters
@@ -453,7 +453,7 @@ class FastSVMHyperparameterOptimizer:
             actual_r2 = r2_score(y_val, y_pred)
             
             best_params['score'] = actual_r2
-            print(f">> Stage 1 complete. Best R┬▓: {actual_r2:.4f} (from negative MSE: {negative_mse:.4f})")
+            print(f">> Stage 1 complete. Best R²: {actual_r2:.4f} (from negative MSE: {negative_mse:.4f})")
             
         except Exception as e:
             print(f">> Stage 1 error: {e}, using defaults")
@@ -477,7 +477,7 @@ class FastSVMHyperparameterOptimizer:
         """Improved Stage 2: Medium optimization with adaptive grid."""
         from .hyperparameter_tuning import grid_search_cv
         
-        metric = 'Accuracy' if mode == 'classifier' else 'R┬▓'
+        metric = 'Accuracy' if mode == 'classifier' else 'R²'
         print(f">> Stage 2: Medium optimization with expanded grid...")
         
         # More comprehensive grid based on previous results
@@ -506,7 +506,7 @@ class FastSVMHyperparameterOptimizer:
                 verbose=False
             )
             
-            # Calculate actual R┬▓ for validation
+            # Calculate actual R² for validation
             from .preprocessing import train_test_split, standardize_fit, standardize_apply
             from .metrics import r2_score
             
@@ -522,7 +522,7 @@ class FastSVMHyperparameterOptimizer:
             actual_r2 = r2_score(y_val, y_pred)
             
             best_params['score'] = actual_r2
-            print(f">> Stage 2 complete. Best R┬▓: {actual_r2:.4f} (from negative MSE: {negative_mse:.4f})")
+            print(f">> Stage 2 complete. Best R²: {actual_r2:.4f} (from negative MSE: {negative_mse:.4f})")
             
             # Time check
             time_elapsed = time.time() - start_time
@@ -701,7 +701,7 @@ class FastSVMHyperparameterOptimizer:
         final_params['score'] = final_score
         
         # If score is worse than previous stage or extremely bad, keep previous best
-        metric = 'R┬▓' if mode == 'regressor' else 'Accuracy'
+        metric = 'R²' if mode == 'regressor' else 'Accuracy'
         target_threshold = self.target_r2 if mode == 'regressor' else self.target_accuracy
         
         if (final_score < (target_threshold * 0.5) or 

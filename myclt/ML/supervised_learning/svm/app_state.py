@@ -65,7 +65,7 @@ class AppState:
     coef0: float = 1.0    # Independent term in poly/sigmoid kernel (only for poly/sigmoid)
 
     # SVR specific
-    epsilon: float = 0.1  # Îµ-insensitive tube width (for regression), must be >= 0
+    epsilon: float = 0.1  # ε-insensitive tube width (for regression), must be >= 0
     epsilon_auto: bool = False  # Auto optimize epsilon
 
     # Kernel auto optimization
@@ -145,7 +145,7 @@ def print_status(s: AppState) -> None:
         if state.model_type.startswith("kernel_"):
             kernel_params.append(f"kernel={state.kernel}")
             if state.kernel in ("rbf", "poly", "sigmoid"):
-                kernel_params.append(f"Î³={state.gamma}")
+                kernel_params.append(f"γ={state.gamma}")
             if state.kernel == "poly":
                 kernel_params.append(f"degree={state.degree}")
                 kernel_params.append(f"coef0={state.coef0}")
@@ -154,7 +154,7 @@ def print_status(s: AppState) -> None:
 
         c_str = "AUTO" if getattr(state, 'C_auto', False) else f"C={state.C}"
         if state.model_type in ("linear_svr", "kernel_svr"):
-            return ", ".join([c_str, *kernel_params, f"Îµ={state.epsilon}"])
+            return ", ".join([c_str, *kernel_params, f"ε={state.epsilon}"])
         else:
             return ", ".join([c_str, *(kernel_params or ["linear"])])
 

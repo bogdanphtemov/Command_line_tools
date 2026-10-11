@@ -69,10 +69,10 @@ def select_features_and_target_binary(dataset: Dataset, mode: str = 'classifier'
                 f"Binary SVM requires exactly 2 classes, found {len(unique_values)}. "
                 f"For multiclass, use Multiclass SVM."
             )
-        print(f"\nâœ“ Binary classification: classes = {sorted(unique_values.tolist())}")
+        print(f"\n✓ Binary classification: classes = {sorted(unique_values.tolist())}")
         print(f"  Class distribution: {dict(zip(*np.unique(prepared.Y, return_counts=True)))}")
     else:
-        print(f"\nâœ“ Regression target selected: {prepared.Y.shape[0]} samples")
+        print(f"\n✓ Regression target selected: {prepared.Y.shape[0]} samples")
         print(f"  Range: [{prepared.Y.min():.4f}, {prepared.Y.max():.4f}]")
 
     return prepared
@@ -101,7 +101,7 @@ def configure_common_hyperparameters(mode: str = 'classifier') -> dict:
     epsilon_value = 0.1
     if mode == 'regressor':
         from myclt.common.input_validation import ask_epsilon_with_auto
-        epsilon_input = ask_epsilon_with_auto("Epsilon (Îµ-insensitive tube, 0.001-1.0)")
+        epsilon_input = ask_epsilon_with_auto("Epsilon (ε-insensitive tube, 0.001-1.0)")
         epsilon_auto = (epsilon_input is None)
         epsilon_value = epsilon_input or 0.1
 
@@ -244,15 +244,15 @@ def load_data_interactive(s: AppState) -> None:
         path = input("\nCSV path: ").strip()
         try:
             s.dataset = load_csv_dataset(path)
-            print(f"âœ“ Loaded: {s.dataset.data.shape[0]} rows Ã— {s.dataset.data.shape[1]} columns")
+            print(f"✓ Loaded: {s.dataset.data.shape[0]} rows × {s.dataset.data.shape[1]} columns")
         except FileNotFoundError as e:
-            print(f"âœ— Error: {e}")
+            print(f"✗ Error: {e}")
     else:
         try:
             s.dataset = manual_input_dataset()
-            print(f"âœ“ Created: {s.dataset.data.shape[0]} rows Ã— {s.dataset.data.shape[1]} columns")
+            print(f"✓ Created: {s.dataset.data.shape[0]} rows × {s.dataset.data.shape[1]} columns")
         except ValueError as e:
-            print(f"âœ— Error: {e}")
+            print(f"✗ Error: {e}")
     pause()
 
 
@@ -265,7 +265,7 @@ def select_features_interactive(s: AppState) -> None:
     try:
         s.prepareddata = select_features_and_target_binary(s.dataset, s.mode)
         rebuild_split(s)
-        print("âœ“ Features and target selected")
+        print("✓ Features and target selected")
         pause()
     except ValueError as e:
         print(f"âœ— Error: {e}")
@@ -284,7 +284,7 @@ def configure_split_interactive(s: AppState) -> None:
     s.seed = ask_int("Random seed (integer)", min_val=0, max_val=10000, default=42)
     s.use_scaling = ask_yes_no_recommended("Use feature scaling (standardization)?", recommended=True)
     rebuild_split(s)
-    print("âœ“ Split configuration updated")
+    print("✓ Split configuration updated")
     pause()
 
 
@@ -335,13 +335,13 @@ def configure_model_interactive(s: AppState) -> None:
             s.degree = kernel_params.get('degree', 3)
             s.coef0 = kernel_params.get('coef0', 1.0)
 
-    print("âœ“ Model configured")
+    print("✓ Model configured")
 
 
 def auto_optimize_all_params(s: AppState) -> Dict[str, Any]:
     """Optimize all parameters using our fast optimization algorithm."""
     print("\n" + "=" * 70)
-    print("ðŸš€ FAST AUTOMATIC OPTIMIZATION")
+    print("🚀 FAST AUTOMATIC OPTIMIZATION")
     print("=" * 70)
     
     # Ask for time limit
@@ -374,12 +374,12 @@ def auto_optimize_all_params(s: AppState) -> Dict[str, Any]:
             s.epsilon = optimized_params['epsilon']
         
         print("\n" + "=" * 70)
-        print("âœ… OPTIMIZATION COMPLETE")
+        print("✓ OPTIMIZATION COMPLETE")
         print("=" * 70)
-        metric_name = 'RÂ² Score' if s.mode == 'regressor' else 'Accuracy'
+        metric_name = 'R² Score' if s.mode == 'regressor' else 'Accuracy'
         metric_value = optimized_params.get('score', -float('inf'))
         print(f"Best {metric_name}: {metric_value:.4f}")
-        print(f"Target: {'â‰¥ 0.80' if s.mode == 'regressor' else 'â‰¥ 0.85'}")
+        print(f"Target: {'≥ 0.80' if s.mode == 'regressor' else '≥ 0.85'}")
         print(f"Optimal Parameters:")
         for key, value in optimized_params.items():
             if key != 'score':
@@ -463,7 +463,7 @@ def train_model_interactive(s: AppState) -> None:
         # Auto-tune kernel and epsilon if needed (kernel-based models and SVR)
         if hasattr(s, 'kernel_auto') and s.kernel_auto:
             # Use new auto optimization for kernel parameters
-            print("\nðŸ”§ Starting automatic kernel optimization...")
+            print("\n🔧 Starting automatic kernel optimization...")
             from .hyperparameter_optimization import auto_optimize_parameters
             
             # Create temporary dataset for optimization
@@ -487,10 +487,10 @@ def train_model_interactive(s: AppState) -> None:
             if s.mode == 'regressor':
                 s.epsilon = optimized_params['epsilon']
             
-            print("âœ“ Kernel and parameters optimized")
+            print("✓ Kernel and parameters optimized")
         elif s.mode == 'regressor' and hasattr(s, 'epsilon_auto') and s.epsilon_auto:
             # Auto-tune only epsilon for SVR
-            print("\nðŸ”§ Starting automatic epsilon optimization...")
+            print("\n🔧 Starting automatic epsilon optimization...")
             from .hyperparameter_optimization import SVMHyperparameterOptimizer
             
             # Create validation split
@@ -503,7 +503,7 @@ def train_model_interactive(s: AppState) -> None:
             s.epsilon = optimizer.optimize_epsilon_param(
                 X_train, y_train, X_val, y_val, s.mode
             )
-            print(f"âœ“ Epsilon optimized to: {s.epsilon}")
+            print(f"✓ Epsilon optimized to: {s.epsilon}")
 
         # Create model based on type
         if s.model_type == "linear_svm":
@@ -544,7 +544,7 @@ def train_model_interactive(s: AppState) -> None:
             patience=patience, min_delta=1e-6, verbose=True
         )
 
-        print(f"âœ“ Training complete ({len(s.model.loss_history)} epochs / {s.epochs} max)")
+        print(f"✓ Training complete ({len(s.model.loss_history)} epochs / {s.epochs} max)")
         if hasattr(s.model, 'n_support_vectors'):
             print(f"  Support vectors: {s.model.n_support_vectors}")
 
@@ -554,7 +554,7 @@ def train_model_interactive(s: AppState) -> None:
                 plot_loss_curve(s.model.loss_history, ylabel="Hinge Loss",
                                 title=f"{s.model_type.upper()} Loss Curve")
             else:
-                plot_loss_curve(s.model.loss_history, ylabel="Îµ-Insensitive Loss",
+                plot_loss_curve(s.model.loss_history, ylabel="ε-Insensitive Loss",
                                 title=f"{s.model_type.upper()} Loss Curve")
 
     except Exception as e:
@@ -639,12 +639,12 @@ def evaluate_model_interactive(s: AppState) -> None:
 
             # Epsilon tube (if SVR and 1D feature)
             if s.model_type in ("linear_svr", "kernel_svr") and s.X_test.shape[1] == 1:
-                if ask_yes_no("Show Îµ-tube visualization?", default=False):
+                if ask_yes_no("Show ε-tube visualization?", default=False):
                     plot_svr_tube(s.X_test, s.y_test, y_pred,
                                   epsilon=s.epsilon,
                                   feature_idx=0)
 
-        print("âœ“ Evaluation complete")
+        print("✓ Evaluation complete")
 
     except Exception as e:
         print(f"âœ— Evaluation error: {e}")
@@ -701,7 +701,7 @@ def menu_data(s: AppState) -> None:
     """Data menu."""
     while True:
         clear_screen()
-        print_header(f"SVM â€” Data ({'Classification' if s.mode == 'classifier' else 'Regression'})")
+        print_header(f"SVM — Data ({'Classification' if s.mode == 'classifier' else 'Regression'})")
         print_status(s)
         options = ["Load dataset (CSV / Manual)",
                     "Select features + target", "Configure train/test split",
@@ -721,7 +721,7 @@ def menu_train(s: AppState) -> None:
     """Train menu."""
     while True:
         clear_screen()
-        print_header("SVM â€” Train")
+        print_header("SVM — Train")
         print_status(s)
         options = ["Configure model", "Train model", "Back"]
         choice = ask_choice("", options)
@@ -739,7 +739,7 @@ def menu_evaluate(s: AppState) -> None:
     """Evaluate menu."""
     while True:
         clear_screen()
-        print_header("SVM â€” Evaluate")
+        print_header("SVM — Evaluate")
         print_status(s)
         options = ["Evaluate on test set",
                     f"Explain {'classification' if s.mode == 'classifier' else 'regression'} metrics",
@@ -751,64 +751,64 @@ def menu_evaluate(s: AppState) -> None:
         elif choice == 1:
             clear_screen()
             if s.mode == 'classifier':
-                print_header("SVM Classification â€” Metrics Explained")
+                print_header("SVM Classification — Metrics Explained")
                 print("\nACCURACY:")
-                print("â”€" * 70)
-                print("  â€¢ What: Percentage of correct predictions")
-                print("  â€¢ Formula: correct / total")
+                print("─" * 70)
+                print("  • What: Percentage of correct predictions")
+                print("  • Formula: correct / total")
 
                 print("\nPRECISION:")
-                print("â”€" * 70)
-                print("  â€¢ What: Of predicted positives, how many are correct")
-                print("  â€¢ Formula: TP / (TP + FP)")
+                print("─" * 70)
+                print("  • What: Of predicted positives, how many are correct")
+                print("  • Formula: TP / (TP + FP)")
 
                 print("\nRECALL:")
-                print("â”€" * 70)
-                print("  â€¢ What: Of actual positives, how many were found")
-                print("  â€¢ Formula: TP / (TP + FN)")
+                print("─" * 70)
+                print("  • What: Of actual positives, how many were found")
+                print("  • Formula: TP / (TP + FN)")
 
                 print("\nF1 SCORE:")
-                print("â”€" * 70)
-                print("  â€¢ Harmonic mean of precision and recall")
-                print("  â€¢ Formula: 2 Ã— P Ã— R / (P + R)")
+                print("─" * 70)
+                print("  • Harmonic mean of precision and recall")
+                print("  • Formula: 2 × P × R / (P + R)")
 
                 print("\nCONFUSION MATRIX:")
-                print("â”€" * 70)
-                print("  â€¢ [[TN, FP], [FN, TP]]")
-                print("  â€¢ Diagonal = correct, off-diagonal = errors")
+                print("─" * 70)
+                print("  • [[TN, FP], [FN, TP]]")
+                print("  • Diagonal = correct, off-diagonal = errors")
 
                 print("\nSUPPORT VECTORS:")
-                print("â”€" * 70)
-                print("  â€¢ Data points that determine the decision boundary")
-                print("  â€¢ Points with margin â‰¤ 1")
-                print("  â€¢ Only SVs affect the model (sparsity!)")
+                print("─" * 70)
+                print("  • Data points that determine the decision boundary")
+                print("  • Points with margin ≤ 1")
+                print("  • Only SVs affect the model (sparsity!)")
             else:
-                print_header("SVR Regression â€” Metrics Explained")
+                print_header("SVR Regression — Metrics Explained")
                 print("\nMSE (Mean Squared Error):")
-                print("â”€" * 70)
-                print("  â€¢ Average squared difference between true and predicted")
-                print("  â€¢ Penalizes large errors more")
+                print("─" * 70)
+                print("  • Average squared difference between true and predicted")
+                print("  • Penalizes large errors more")
 
                 print("\nRMSE (Root Mean Squared Error):")
-                print("â”€" * 70)
-                print("  â€¢ Square root of MSE")
-                print("  â€¢ Same units as target variable")
+                print("─" * 70)
+                print("  • Square root of MSE")
+                print("  • Same units as target variable")
 
                 print("\nMAE (Mean Absolute Error):")
-                print("â”€" * 70)
-                print("  â€¢ Average absolute difference")
-                print("  â€¢ Less sensitive to outliers than MSE")
+                print("─" * 70)
+                print("  • Average absolute difference")
+                print("  • Less sensitive to outliers than MSE")
 
-                print("\nRÂ² (Coefficient of Determination):")
-                print("â”€" * 70)
-                print("  â€¢ How well the model explains variance")
-                print("  â€¢ 1.0 = perfect, 0.0 = mean predictor, < 0 = worse than mean")
+                print("\nR² (Coefficient of Determination):")
+                print("─" * 70)
+                print("  • How well the model explains variance")
+                print("  • 1.0 = perfect, 0.0 = mean predictor, < 0 = worse than mean")
 
-                print("\nÎµ-INSENSITIVE TUBE:")
-                print("â”€" * 70)
-                print("  â€¢ Errors within Â±Îµ are ignored")
-                print("  â€¢ Points outside the tube = support vectors")
-                print("  â€¢ Controls sparsity of the solution")
+                print("\nε-INSENSITIVE TUBE:")
+                print("─" * 70)
+                print("  • Errors within ±ε are ignored")
+                print("  • Points outside the tube = support vectors")
+                print("  • Controls sparsity of the solution")
             pause()
         else:
             return
@@ -832,7 +832,7 @@ def menu_save_load(s: AppState) -> None:
 
     while True:
         clear_screen()
-        print_header(f"SVM â€” Save/Load Session ({'Classifier' if s.mode == 'classifier' else 'Regression'})")
+        print_header(f"SVM — Save/Load Session ({'Classifier' if s.mode == 'classifier' else 'Regression'})")
         print_status(s)
 
         options = ["Save complete session", "Load session",
@@ -859,7 +859,7 @@ def menu_save_load(s: AppState) -> None:
                 session_data, arrays_dict = adapter.extract(s)
                 session_dir = f"./ml_sessions/{session_name}"
                 storage.save_session(session_data, session_dir, arrays_dict, verbose=True)
-                print(f"\nâœ“ Session '{session_name}' saved!")
+                print(f"\n✓ Session '{session_name}' saved!")
             except Exception as e:
                 print(f"!Error saving: {e}!")
             pause()
@@ -884,7 +884,7 @@ def menu_save_load(s: AppState) -> None:
                 # Determine which adapter to use based on stored algorithm_name
                 adapter.restore(session_data, arrays_dict, s)
 
-                print(f"\nâœ“ Session '{session_name}' loaded!")
+                print(f"\n✓ Session '{session_name}' loaded!")
                 if s.metrics:
                     metrics_str = ", ".join(f"{k}={v:.4f}" for k, v in s.metrics.items())
                     print(f"  Metrics: {metrics_str}")
@@ -903,7 +903,7 @@ def menu_save_load(s: AppState) -> None:
                     try:
                         _, arrays = storage.load_session(session_dir, verbose=False)
                         ds_shape = arrays.get("dataset", np.array([])).shape
-                        print(f" âœ“ {name} (dataset: {ds_shape})")
+                        print(f" ✓ {name} (dataset: {ds_shape})")
                     except:
                         print(f" ? {name} (corrupted)")
             pause()
@@ -933,7 +933,7 @@ def menu_predict(s: AppState) -> None:
     """Predict menu."""
     while True:
         clear_screen()
-        print_header("SVM â€” Predict")
+        print_header("SVM — Predict")
         print_status(s)
         options = ["Make a single prediction",
                     "Batch predict from CSV file", "Back"]
@@ -973,10 +973,10 @@ def menu_predict(s: AppState) -> None:
                     output_path=output_csv,
                     model_type=model_type,
                 )
-                print(f"\n  âœ“ Processed {result['n_samples']} rows!")
-                print(f"  âœ“ Output: {result['output_path']}")
+                print(f"\n  ✓ Processed {result['n_samples']} rows!")
+                print(f"  ✓ Output: {result['output_path']}")
             except Exception as e:
-                print(f"\n  âœ— Error: {e}")
+                print(f"\n  ✗ Error: {e}")
             pause()
         else:
             return
@@ -986,7 +986,7 @@ def menu_visualize(s: AppState) -> None:
     """Visualize menu."""
     while True:
         clear_screen()
-        print_header("SVM â€” Visualize")
+        print_header("SVM — Visualize")
         print_status(s)
         options = [
             "Plot loss curve",

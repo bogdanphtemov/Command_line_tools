@@ -19,7 +19,7 @@ def print_header(title: str) -> None:
 def pause(msg: str = "Press Enter to continue...") -> None:
     input(f"\n{msg}")
 
-def print_adaptive_text_blocks(text_blocks: list, separator: str = "â”€") -> None:
+def print_adaptive_text_blocks(text_blocks: list, separator: str = "─") -> None:
     """
     Print multiple text blocks with adaptive formatting.
     

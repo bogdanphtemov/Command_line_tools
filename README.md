@@ -79,17 +79,17 @@ python -m myclt
 # just: myclt
 ```
 
-> **Note:** `python -m myclt` працює з будь-якої папки після встановлення пакета.
+> **Note:** `python -m myclt` works from any folder after package installation.
 
-### Якщо ви не хочете встановлювати пакет:
+### If you don't want to install the package:
 ```bash
-# Достатньо запускати з кореня проекту:
+# Just run from the project root:
 python -m myclt
-# або
+# or
 python3 -m myclt
 ```
 
-> **Не потрібно** заходити всередину папки `myclt/`! Проект запускається з кореня.
+> **No need** to go inside the `myclt/` folder! The project runs from the root.
 
 This launches an interactive menu where you can:
 1. Load and explore datasets

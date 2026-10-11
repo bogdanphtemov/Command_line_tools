@@ -44,7 +44,9 @@ class MultinomialAppState:
     # === Model hyperparameters ===
     base_estimator_type: str = "linear"  # 'linear' or 'kernel'
     C: float = 1.0
+    C_auto: bool = False  # Auto-tune C
     learning_rate: float = 0.001
+    learning_rate_auto: bool = False  # Auto-tune learning rate
     epochs: int = 1000
     batch_size: int = 0  # 0 = full batch
 
@@ -53,6 +55,7 @@ class MultinomialAppState:
     gamma: float = 1.0
     degree: int = 3
     coef0: float = 1.0
+    kernel_auto: bool = False  # Auto-tune kernel selection
 
     # Split data
     X_train: Optional[np.ndarray] = None
@@ -130,11 +133,16 @@ def print_status(s: MultinomialAppState) -> None:
         )
 
     def format_regularization(state):
-        parts = [f"C={state.C}"]
+        # Show AUTO for parameters that are set to auto-tune
+        c_str = f"C={'AUTO' if getattr(state, 'C_auto', False) else state.C}"
+        parts = [c_str]
+        
         if state.base_estimator_type == "kernel":
-            parts.append(f"kernel={state.kernel}")
-            if state.kernel == "rbf":
-                parts.append(f"γ={state.gamma}")
+            kernel_str = f"kernel={'AUTO' if getattr(state, 'kernel_auto', False) else state.kernel}"
+            parts.append(kernel_str)
+            if state.kernel == "rbf" or getattr(state, 'kernel_auto', False):
+                gamma_str = f"γ={'AUTO' if getattr(state, 'kernel_auto', False) else state.gamma}"
+                parts.append(gamma_str)
         else:
             parts.append("linear")
         return ", ".join(parts)
