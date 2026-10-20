@@ -38,7 +38,7 @@ def plot_loss_curve(history: List[float], ylabel: str = "Loss", title: str = "Tr
     plt.show()
 
 
-def plot_true_vs_pred(y_true: np.ndarray, y_pred: np.ndarray, title: str = "True vs Predicted") -> None:
+def plot_true_vs_pred(y_true: np.ndarray, y_pred: np.ndarray, title: str = "True vs Predicted", show: bool = True) -> None:
     """
     Plot true vs predicted values with diagonal reference line.
     
@@ -48,6 +48,7 @@ def plot_true_vs_pred(y_true: np.ndarray, y_pred: np.ndarray, title: str = "True
         y_true: True target values
         y_pred: Predicted values
         title: Title for the plot
+        show: Whether to display the plot immediately
     """
     plt.figure()
     plt.scatter(y_true, y_pred)
@@ -60,4 +61,6 @@ def plot_true_vs_pred(y_true: np.ndarray, y_pred: np.ndarray, title: str = "True
     plt.ylabel("y_pred")
     plt.title(title)
     plt.grid(True)
-    plt.show()
+    
+    if show:
+        plt.show()
