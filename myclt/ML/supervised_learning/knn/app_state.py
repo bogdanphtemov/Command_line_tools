@@ -61,7 +61,7 @@ class AppState:
 
     # scaler params (train-fitted)
     scaler_mean: Optional[np.ndarray] = None
-    scaler_std: Optional[np.ndarray] = None
+    scaled_std: Optional[np.ndarray] = None
 
     model: KNNClassifier | KNNRegressor | None = None
     
@@ -130,14 +130,14 @@ class AppState:
         """
         Reset trained model and splits while keeping parameters.
         
-        Note: Also clears scaler_mean/scaler_std. Use reset_fit() if you only need
+        Note: Also clears scaler_mean/scaled_std. Use reset_fit() if you only need
         to clear the model and metrics while preserving the current scaling.
         """
         self.model = None
         self.X_train = self.X_test = None
         self.y_train = self.y_test = None
         self.train_idx = self.test_idx = None
-        self.scaler_mean = self.scaler_std = None
+        self.scaler_mean = self.scaled_std = None
         self.metrics.clear()
     
     def reset_fit(self) -> None:
@@ -177,14 +177,17 @@ def print_status(s: AppState) -> None:
             for k, v in state.metrics.items()
         )
     
-    def format_model_info(state):
-        # Format KNN model parameters
-        parts = [f"KNN-{state.model_type.title()}", f"k={state.k}", f"metric={state.distance_metric}"]
+    def format_regularization(state):
+        # KNN doesn't use regularization, so just show "none" or model parameters
+        if state.model is None:
+            return "none"
+        # Show model type parameters for KNN
+        parts = [f"type={state.model_type}", f"k={state.k}", f"metric={state.distance_metric}"]
         if state.model_type == 'regression':
             parts.append("weighted" if state.weighted else "unweighted")
-        return " (" + ", ".join(parts) + ")"
+        return ", ".join(parts)
     
-    universal_print_status(s, f"KNN {s.model_type.title()}", format_metrics, format_model_info)
+    universal_print_status(s, f"KNN {s.model_type.title()}", format_metrics, format_regularization)
 
 
 def rebuild_split(s: AppState) -> None:

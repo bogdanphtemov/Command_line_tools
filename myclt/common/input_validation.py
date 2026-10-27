@@ -1,7 +1,20 @@
 from typing import List, Optional
 
-# Shows numbered choices and returns selected index (0-based)
 def ask_choice(prompt: str, choices: List[str]) -> int:
+    """
+    Shows numbered choices and returns the selected index (0-based).
+    
+    Args:
+        prompt: Message to display before listing choices
+        choices: List of option descriptions
+        
+    Returns:
+        int: Index of the selected option (0-based), not the option itself
+        
+    Note:
+        This function guarantees return of an integer index, but clients should
+        handle both int and str return types for future compatibility.
+    """
     while True:
         print(prompt)
         for i, c in enumerate(choices, start=1):

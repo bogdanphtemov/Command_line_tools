@@ -171,23 +171,36 @@ class KNNClassifier(KNNBase):
     
 
     
-    def _make_prediction(self, k_nearest):
+    def _make_prediction_from_neighbors(self, distances, labels):
         """
-        Make classification prediction using majority voting.
+        Make classification prediction using majority voting with tie-breaking.
         
         Args:
-            k_nearest: List of (distance, label) tuples for k nearest neighbors
+            distances: Sorted array of distances (ascending) from k nearest neighbors
+            labels: Corresponding labels from k nearest neighbors
             
         Returns:
-            Most common label among k nearest neighbors
+            Predicted class label
             
         Note:
-            In case of ties, the label from the nearest neighbor is selected.
-            k_nearest should be sorted by distance (closest first).
+            - Ties are broken by selecting the class of the nearest neighbor
+            - If still tied, uses overall frequency in training data 
+            - For empty neighbors, returns most frequent class in training data
         """
+        if len(labels) == 0:
+            # Fallback: return most frequent class in training data
+            if self.y_train is None or len(self.y_train) == 0:
+                raise ValueError("Model not fitted or no training data")
+            return self._get_most_frequent_class()
+            
+        # Create a list of (distance, label) pairs for tie-breaking
+        k_nearest = list(zip(distances, labels))
+        
+        # Use existing _vote method which handles tie-breaking correctly
         winner, _ = self._vote(k_nearest)
         return winner
-    
+        
+
     def predict_proba(self, X_test):
         """
         Predict probability estimates for test data.
@@ -245,13 +258,8 @@ class KNNClassifier(KNNBase):
         """
         X_test = self._validate_X(X_test)
         
-        predictions = []
-        for test_point in X_test:
-            k_nearest = self._get_k_nearest_neighbors(test_point)
-            pred = self._make_prediction(k_nearest)
-            predictions.append(pred)
-        
-        return np.array(predictions)
+        # Use parent class's vectorized predict when possible
+        return super().predict(X_test)
     
     def score(self, X_test, y_test):
         """
@@ -278,3 +286,18 @@ class KNNClassifier(KNNBase):
             raise ValueError("Cannot score on empty test set")
         
         return np.mean(y_pred == y_test)
+    def set_params(self, params):
+        """
+        Set model parameters from loaded data.
+        
+        Override to recalculate classes_ and _class_to_idx after training data is restored.
+        
+        Args:
+            params: Dictionary of model parameters including X_train and y_train
+        """
+        super().set_params(params)
+        
+        # After parameters are set, recalculate class information if model is trained
+        if self.is_trained and self.y_train is not None:
+            self.classes_ = np.unique(self.y_train)
+            self._class_to_idx = {c: i for i, c in enumerate(self.classes_)}

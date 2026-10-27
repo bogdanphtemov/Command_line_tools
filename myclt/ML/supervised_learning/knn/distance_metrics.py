@@ -8,6 +8,7 @@ Note:
 """
 
 from typing import Union, Dict, Callable
+from types import MappingProxyType
 import numpy as np
 
 
@@ -17,7 +18,17 @@ ArrayLike = Union[list, tuple, np.ndarray]
 
 def _as_arrays(point1: ArrayLike, point2: ArrayLike) -> tuple[np.ndarray, np.ndarray]:
     """Convert point-like objects to numpy arrays with float dtype."""
-    return np.asarray(point1, dtype=float), np.asarray(point2, dtype=float)
+    p1, p2 = np.asarray(point1, dtype=float), np.asarray(point2, dtype=float)
+    
+    # Validate dimensions (must be 1D)
+    if p1.ndim != 1 or p2.ndim != 1:
+        raise ValueError(f"Points must be 1D arrays, got {p1.ndim}D and {p2.ndim}D")
+    
+    # Validate compatible shapes
+    if p1.shape != p2.shape:
+        raise ValueError(f"Points must have same shape, got {p1.shape} and {p2.shape}")
+    
+    return p1, p2
 
 
 def euclidean_distance(point1: ArrayLike, point2: ArrayLike) -> float:
@@ -64,10 +75,10 @@ def minkowski_distance(point1: ArrayLike, point2: ArrayLike, p: float = 2) -> fl
         float: Minkowski distance between point1 and point2
         
     Raises:
-        ValueError: If p < 1 (Minkowski requires p >= 1)
+        ValueError: If p is not finite or p < 1 (Minkowski requires p >= 1)
     """
-    if p < 1:
-        raise ValueError(f"Minkowski p must be >= 1, got {p}")
+    if not np.isfinite(p) or p < 1:
+        raise ValueError(f"Minkowski p must be a finite number >= 1, got {p}")
     
     p1, p2 = _as_arrays(point1, point2)
     
@@ -92,7 +103,7 @@ def cosine_distance(point1: ArrayLike, point2: ArrayLike) -> float:
         float: Cosine distance between point1 and point2 (1 - cosine_similarity)
         
     Note:
-        If either vector is zero, returns 1.0 (maximum distance),
+        If either vector is close to zero, returns 1.0 (maximum distance),
         since cosine similarity is undefined for zero vectors.
     """
     p1, p2 = _as_arrays(point1, point2)
@@ -101,20 +112,27 @@ def cosine_distance(point1: ArrayLike, point2: ArrayLike) -> float:
     norm1 = np.linalg.norm(p1)
     norm2 = np.linalg.norm(p2)
     
-    if norm1 == 0 or norm2 == 0:
-        return 1.0  # Distance is maximum if one vector is zero
+    # Use tolerance for floating-point comparison (similar to other code in the project)
+    eps = 1e-10
+    if norm1 < eps or norm2 < eps:
+        return 1.0  # Distance is maximum if one vector is near zero
     
     cosine_sim = dot_product / (norm1 * norm2)
+    # Ensure cosine similarity stays within valid range [-1, 1]
+    cosine_sim = np.clip(cosine_sim, -1.0, 1.0)
     return 1 - cosine_sim
 
 
 # Define the metrics dictionary after all functions are defined
-DISTANCE_METRICS: Dict[str, Callable] = {
+_DISTANCE_METRICS_MAPPING: Dict[str, Callable] = {
     'euclidean': euclidean_distance,
     'manhattan': manhattan_distance,
     'minkowski': minkowski_distance,
     'cosine': cosine_distance
 }
+
+# Make the metrics dictionary read-only
+DISTANCE_METRICS = MappingProxyType(_DISTANCE_METRICS_MAPPING)
 
 # Frozen set for validation
 SUPPORTED_METRICS = frozenset(DISTANCE_METRICS.keys())

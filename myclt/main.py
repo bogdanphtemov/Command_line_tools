@@ -5,6 +5,7 @@ from myclt.ML.supervised_learning.logistic_regression.cli import main as run_log
 from myclt.ML.supervised_learning.logistic_regression.cli_multinomial import main as run_multinomial_logistic_regression
 from myclt.ML.supervised_learning.svm.cli import main as run_svm
 from myclt.ML.supervised_learning.svm.cli_multinomial import main as run_svm_multinomial
+from myclt.ML.supervised_learning.knn.cli import main as run_knn
 from myclt.legacy_code.cleaner import main as run_cleaner
 from myclt.legacy_code.project_creator import main as run_project_creator
 
@@ -15,6 +16,7 @@ MENU_STRUCTURE = {
         "Multinomial Logistic Regression for Multiclass Classification": run_multinomial_logistic_regression,
         "Support Vector Machines (SVM) for Classification and Regression": run_svm,
         "Multiclass SVM (One-vs-Rest)": run_svm_multinomial,
+        "K-Nearest Neighbors (KNN) for Classification and Regression": run_knn,
     },
     "Machine learning algorithms without a teacher": {},
     "Machine learning algorithms with reinforcement": {},

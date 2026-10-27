@@ -43,32 +43,65 @@ def plot_classification_boundary_2d(
     xx, yy = np.meshgrid(np.linspace(x_min, x_max, 50),
                          np.linspace(y_min, y_max, 50))
     
-    Z = model.predict(np.c_[xx.ravel(), yy.ravel()])
-    Z = Z.reshape(xx.shape)
+    # Handle string labels for contourf compatibility
+    unique_labels = np.unique(y_train)
+    label_to_int = {label: i for i, label in enumerate(unique_labels)}
+    
+    # Convert training labels to numeric if they are strings
+    if y_train.dtype.kind in ['U', 'S']:  # Unicode or bytes string
+        y_train_numeric = np.array([label_to_int[label] for label in y_train])
+        
+        # Predict and convert predictions to numeric for contourf
+        Z = model.predict(np.c_[xx.ravel(), yy.ravel()])
+        Z_numeric = np.array([label_to_int[label] for label in Z]).reshape(xx.shape)
+    else:
+        # For numeric labels
+        y_train_numeric = y_train
+        # Predict and ensure numeric type
+        Z = model.predict(np.c_[xx.ravel(), yy.ravel()])
+        # Use safe conversion to avoid string conversion issues
+        if Z.dtype.kind in ['U', 'S']:  # Если модель возвращает строки
+            Z_numeric = np.array([label_to_int[label] for label in Z]).reshape(xx.shape)
+        else:
+            # For numeric predictions, use directly with float conversion
+            Z_numeric = Z.reshape(xx.shape).astype(float)
     
     plt.figure(figsize=(10, 8))
     
     # Plot decision boundary
-    plt.contourf(xx, yy, Z, alpha=0.8, cmap=plt.cm.RdYlBu)
+    contour = plt.contourf(xx, yy, Z_numeric, alpha=0.8, cmap=plt.cm.RdYlBu)
     
     # Plot training points
-    scatter = plt.scatter(X_train[:, 0], X_train[:, 1], c=y_train, 
+    scatter = plt.scatter(X_train[:, 0], X_train[:, 1], c=y_train_numeric, 
                          cmap=plt.cm.RdYlBu, edgecolors='black', s=50)
     
     # Plot test points if provided
     if X_test is not None and y_test is not None:
-        plt.scatter(X_test[:, 0], X_test[:, 1], c=y_test, 
+        if y_test.dtype.kind in ['U', 'S']:  # Unicode or bytes string
+            y_test_numeric = np.array([label_to_int[label] for label in y_test])
+        else:
+            y_test_numeric = y_test
+        plt.scatter(X_test[:, 0], X_test[:, 1], c=y_test_numeric, 
                    cmap=plt.cm.RdYlBu, edgecolors='black', 
                    marker='s', s=100, alpha=0.7)
     
     plt.xlabel('Feature 1')
     plt.ylabel('Feature 2')
     plt.title(title)
-    plt.colorbar(scatter)
+    
+    # Create colorbar with proper labels
+    cbar = plt.colorbar(scatter)
+    if y_train.dtype.kind in ['U', 'S']:  # Show actual labels instead of numbers
+        cbar.set_ticks(range(len(unique_labels)))
+        cbar.set_ticklabels(unique_labels)
+    
     plt.grid(True, alpha=0.3)
     
     if show:
         plt.show()
+    elif not show:
+        # Clean up figure if not showing to prevent memory leaks
+        plt.close()
 
 
 def plot_regression_comparison(
@@ -91,26 +124,42 @@ def plot_regression_comparison(
         y_test: Test values (optional)
         title: Plot title
     """
+    fig = None
+    
     if X_train.shape[1] != 1:
         print("Regression comparison plot optimized for 1D data, showing True vs Predicted instead")
         # Always show true vs predicted for multi-dimensional data
         if X_test is not None and y_test is not None:
+            # Additional check for consistency
+            if X_test.shape[1] != X_train.shape[1]:
+                print(f"Error: X_train has {X_train.shape[1]} features, but X_test has {X_test.shape[1]} features")
+                return
             y_pred = model.predict(X_test)
             plot_true_vs_pred(y_test, y_pred, 
-                             title="KNN: True vs Predicted (Test Set)", 
-                             show=False)  # Don't show now, control from outer function
+                             title="KNN: True vs Predicted (Test Set)")
+            fig = plt.gcf()  # Get current figure for cleanup
         else:
             y_pred = model.predict(X_train)
             plot_true_vs_pred(y_train, y_pred,
-                             title="KNN: True vs Predicted (Training Set)",
-                             show=False)  # Don't show now, control from outer function
+                             title="KNN: True vs Predicted (Training Set)")
+            fig = plt.gcf()  # Get current figure for cleanup
         
         if show:
             plt.show()
+        elif not show and fig is not None:
+            plt.close(fig)  # Clean up figure if not showing to prevent memory leaks
         return
     
+    # Additional check for test data consistency
+    if X_test is not None and y_test is not None:
+        if X_test.shape[1] != 1:
+            print("Warning: X_test should have 1 feature for consistent visualization")
+            # Try to use first feature column if needed
+            if X_test.shape[1] > 1:
+                X_test = X_test[:, 0].reshape(-1, 1)
+    
     # Plot for 1D case
-    plt.figure(figsize=(10, 6))
+    fig = plt.figure(figsize=(10, 6))
     
     # Plot training data
     plt.scatter(X_train.flatten(), y_train, color='blue', 
@@ -126,7 +175,12 @@ def plot_regression_comparison(
     
     # Plot test data if available
     if X_test is not None and y_test is not None:
-        plt.scatter(X_test.flatten(), y_test, color='green', 
+        # Ensure correct dimensionality for flattening
+        if X_test.shape[1] != 1:
+            X_test_flat = X_test[:, 0].flatten()  # Use first column
+        else:
+            X_test_flat = X_test.flatten()
+        plt.scatter(X_test_flat, y_test, color='green', 
                    alpha=0.7, marker='s', s=80, label='Test Data')
     
     plt.xlabel('Feature')
@@ -137,3 +191,5 @@ def plot_regression_comparison(
     
     if show:
         plt.show()
+    elif not show:
+        plt.close(fig)  # Clean up figure if not showing to prevent memory leaks
