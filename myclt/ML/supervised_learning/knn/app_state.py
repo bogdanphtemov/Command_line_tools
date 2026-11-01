@@ -204,7 +204,7 @@ def rebuild_split(s: AppState) -> None:
     Sets:
         X_train, X_test, y_train, y_test: Split data arrays
         train_idx, test_idx: Original indices for tracking
-        scaler_mean, scaler_std: Standardization parameters if scaling enabled
+        scaler_mean, scaled_std: Standardization parameters if scaling enabled
         model: Reset to None (data pipeline changed)
         metrics: Cleared via reset_metrics()
         

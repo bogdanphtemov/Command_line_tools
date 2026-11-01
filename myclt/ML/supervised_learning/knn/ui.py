@@ -18,6 +18,9 @@ from myclt.common.input_validation import (
 from myclt.common.ui_helpers import clear_screen , print_header , pause
 from myclt.ML.session_storage import SessionStorage
 
+import numpy as np
+
+from myclt.ML.batch_predict import batch_predict_interactive
 # Constants
 SESSIONS_DIR = "./ml_sessions"
 
@@ -168,6 +171,143 @@ def menu_save_load(s: AppState) -> None:
                 traceback.print_exc()
             pause()
         
+        else:
+            break
+
+def show_prediction_example(feature_names):
+    """
+    Interactive single prediction prompt.
+
+    Args:
+        feature_names: List of feature column names
+
+    Returns:
+        Feature vector for prediction
+    """
+    print("\n" + "=" * 70)
+    print("MAKE A PREDICTION")
+    print("=" * 70)
+    print("Enter values for each feature (press Enter for default 0.0):\n")
+
+    values = []
+    for feature_name in feature_names:
+        while True:
+            try:
+                val_str = input(f"  {feature_name}: ").strip()
+                if val_str == "":
+                    print(f"    (using default: 0.0)")
+                    values.append(0.0)
+                    break
+                value = float(val_str)
+                values.append(value)
+                break
+            except ValueError:
+                print("  Please enter a valid number.")
+
+    return np.array(values, dtype=float)
+
+
+def predict_single_interactive(s: AppState) -> None:
+    """Make a single prediction."""
+    if s.model is None or not s.model.is_trained:
+        print("✗ No trained model!")
+        return
+    if s.prepareddata is None:
+        print("✗ No feature names available!")
+        return
+
+    try:
+        X_input = show_prediction_example(s.prepareddata.feature_names)
+
+        # Apply scaling if needed
+        if s.use_scaling and s.scaler_mean is not None and s.scaled_std is not None:
+            X_input = X_input.reshape(1, -1)
+            from .preprocessing import standardize_apply
+            X_input = standardize_apply(X_input, s.scaler_mean, s.scaled_std)
+        else:
+            X_input = X_input.reshape(1, -1)
+
+        # Predict
+        pred = s.model.predict(X_input)
+        
+        print("\n" + "=" * 70)
+        print("PREDICTION RESULT")
+        print("=" * 70)
+
+        if s.model_type == 'classification':
+            class_name = pred[0]  # KNN already returns string labels directly
+            print(f"Predicted class: {class_name}")
+            # Show probabilities if available
+            if hasattr(s.model, 'predict_proba'):
+                probs = s.model.predict_proba(X_input)[0]
+                print("\nClass probabilities:")
+                for i, prob in enumerate(probs):
+                    class_label = s.model.classes_[i]
+                    print(f"  {class_label}: {prob:.4f}")
+        else:
+            print(f"Predicted value: {pred[0]:.6f}")
+
+        print("=" * 70 + "\n")
+
+    except Exception as e:
+        print(f"✗ Prediction error: {e}")
+        traceback.print_exc()
+def menu_predict(s: AppState) -> None:
+    """Predict menu."""
+    while True:
+        clear_screen()
+        print_header("KNN — Predict")
+        print_status(s)
+        
+        options = [
+            "Make a single prediction",
+            "Batch predict from CSV file",
+            "Back"
+        ]
+        
+        choice = ask_choice("Select action: ", options)
+        
+        if choice == 0:
+            predict_single_interactive(s)
+            pause()
+        elif choice == 1:
+            if s.model is None or not s.model.is_trained:
+                print("✗ Model not trained!")
+                pause()
+                continue
+            if s.prepareddata is None:
+                print("✗ No features selected!")
+                pause()
+                continue
+
+            csv_path = input("\nCSV path: ").strip()
+            if not csv_path:
+                print("✗ Invalid path!")
+                pause()
+                continue
+
+            base_name = os.path.splitext(os.path.basename(csv_path))[0]
+            default_output = f"predictions_{base_name}.csv"
+            output_csv = input(f"Output [{default_output}]: ").strip() or default_output
+
+            try:
+                model_type = "multinomial" if s.model_type == "classification" else "regression"
+                class_names = [str(c) for c in s.model.classes_] if s.model_type == "classification" else None
+                
+                batch_predict_interactive(
+                    csv_path=csv_path,
+                    model=s.model,
+                    feature_names=s.prepareddata.feature_names,
+                    use_scaling=s.use_scaling,
+                    scaler_mean=s.scaler_mean,
+                    scaler_std=s.scaled_std,
+                    output_csv_path=output_csv,
+                    model_type=model_type,
+                    class_names=class_names,
+                )
+            except Exception as e:
+                print(f"\n  ✗ Error: {e}")
+            pause()
         else:
             break
 

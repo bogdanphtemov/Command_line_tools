@@ -112,13 +112,20 @@ def _save_results_csv(results: np.ndarray, header: str, output_path: str,
         output_path: Output file path
         delimiter: CSV delimiter
     """
+    # Determine appropriate format - use string for string label, float for numeric
+    # Handle object arrays (mixed types from string predictions) with string format
+    if results.dtype == np.object_ or not np.issubdtype(results.dtype, np.number):
+        fmt = "%s"
+    else:
+        fmt = "%.6f"
+        
     np.savetxt(
         output_path,
         results,
         delimiter=delimiter,
         header=header,
         comments="",
-        fmt="%.6f"  # Sufficient precision for predictions
+        fmt=fmt  # Dynamic format based on data type
     )
 
 
@@ -296,7 +303,10 @@ def batch_predict_from_csv(
         data_parts.append(X_raw)
 
     # Reshape predictions to column vector
-    pred_col = predictions.reshape(-1, 1).astype(float)
+    # Handle string labels by avoiding .astype(float) which fails on non-numeric data
+    pred_col = predictions.reshape(-1, 1)
+    if np.issubdtype(pred_col.dtype, np.number):
+        pred_col = pred_col.astype(float)
     data_parts.append(pred_col)
 
     # Add probability columns
@@ -306,7 +316,32 @@ def batch_predict_from_csv(
         elif probabilities.ndim == 2:
             data_parts.append(probabilities)
 
-    results_array = np.hstack(data_parts)
+    # Handle mixed data types (numeric + string labels) by building results in a different way
+    # Check if we have mixed data types (predictions might be strings)
+    is_mixed_types = False
+    for part in data_parts:
+        if not np.issubdtype(part.dtype, np.number):
+            is_mixed_types = True
+            break
+    
+    if is_mixed_types:
+        # Mixed types - convert everything to object array and save as string
+        # This is less efficient but works with string labels
+        rows = []
+        for i in range(len(predictions)):
+            row = []
+            for part in data_parts:
+                if part.ndim == 1:
+                    row.append(str(part[i]))
+                else:
+                    # Handle 2D arrays (like multi-column probabilities)
+                    row.extend(str(v) for v in part[i])
+            rows.append(row)
+        
+        results_array = np.array(rows, dtype=object)
+    else:
+        # All numeric - use efficient hstack
+        results_array = np.hstack(data_parts)
 
     # Save to CSV
     header_str = delimiter.join(header_parts)
@@ -367,6 +402,10 @@ def batch_predict_interactive(
     print(f"\n  Loading CSV: {csv_path}")
     print(f"  Features:    {len(feature_names)}")
 
+    # Auto-detect delimiter if not specified
+    if delimiter is None:
+        delimiter = _detect_csv_delimiter(csv_path)
+
     try:
         result = batch_predict_from_csv(
             csv_path=csv_path,
@@ -389,15 +428,15 @@ def batch_predict_interactive(
         # Show a preview of results
         predictions = result['predictions']
         print(f"\n  Prediction summary:")
-        print(f"    Min:       {float(predictions.min()):.4f}")
 
         if result['model_type'] in ("binary", "multinomial"):
             # For classification, show class distribution
             unique, counts = np.unique(predictions, return_counts=True)
-            print(f"    Max:       {float(predictions.max()):.4f}")
-            print(f"    Classes:   {dict(zip(unique.astype(str), counts))}")
+            class_counts = {str(cls): int(cnt) for cls, cnt in zip(unique, counts)}
+            print(f"    Classes:   {class_counts}")
         else:
             # For regression, show statistics
+            print(f"    Min:       {float(predictions.min()):.4f}")
             print(f"    Max:       {float(predictions.max()):.4f}")
             print(f"    Mean:      {float(predictions.mean()):.4f}")
             print(f"    Std:       {float(predictions.std()):.4f}")
