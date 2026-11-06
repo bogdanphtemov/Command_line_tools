@@ -12,8 +12,13 @@ from .metrics import evaluate_knn_model, print_classification_report
 from .classifier import KNNClassifier
 from .regressor import KNNRegressor
 from .session_adapter import KNNSessionAdapter
+from .visualization import (
+    plot_classification_boundary_2d, plot_confusion_matrix,
+    plot_class_probability_distributions, plot_regression_comparison
+)
+from .visualization import plot_true_vs_pred
 from myclt.common.input_validation import (
-    ask_choice, ask_int, ask_float, ask_yes_no
+    ask_choice, ask_int, ask_float, ask_yes_no, ask_yes_no_recommended
 )
 from myclt.common.ui_helpers import clear_screen , print_header , pause
 from myclt.ML.session_storage import SessionStorage
@@ -174,6 +179,166 @@ def menu_save_load(s: AppState) -> None:
         else:
             break
 
+
+def menu_visualize(s: AppState) -> None:
+    """Visualization menu for KNN."""
+    while True:
+        clear_screen()
+        print_header("KNN Tool — Visualization")
+        print_status(s)
+        
+        # Build visualization options based on model type and training status
+        if s.model is None or not s.model.is_trained:
+            print("No trained model available for visualization")
+            pause()
+            return
+            
+        if s.model_type == 'classification':
+            options = [
+                "Plot decision boundary (2D only)",
+                "Plot confusion matrix (test set)", 
+                "Plot probability distributions (test set)",
+                "Back"
+            ]
+        else:  # regression
+            options = [
+                "Plot True vs Predicted (test set)",
+                "Plot regression comparison (1D only)",
+                "Back"
+            ]
+        
+        choice = ask_choice("Select visualization: ", options)
+        
+        if choice == 0:
+            if s.model_type == 'classification':
+                # Plot decision boundary (2D only)
+                if s.X_train is None or s.X_train.shape[1] != 2:
+                    print("Decision boundary plot requires exactly 2 features")
+                else:
+                    try:
+                        plot_classification_boundary_2d(
+                            s.model, s.X_train, s.y_train, 
+                            s.X_test, s.y_test,
+                            title=f"KNN Classification Boundary (k={s.k})"
+                        )
+                    except Exception as e:
+                        print(f"Error plotting decision boundary: {e}")
+            else:
+                # Plot True vs Predicted
+                if s.X_test is None or s.y_test is None:
+                    print("No test data available")
+                else:
+                    try:
+                        y_pred = s.model.predict(s.X_test)
+                        plot_true_vs_pred(
+                            s.y_test, y_pred,
+                            title=f"KNN Regression: True vs Predicted (k={s.k})"
+                        )
+                    except Exception as e:
+                        print(f"Error plotting True vs Predicted: {e}")
+            pause()
+            
+        elif choice == 1:
+            if s.model_type == 'classification':
+                # Plot confusion matrix
+                if s.X_test is None or s.y_test is None:
+                    print("No test data available")
+                    pause()
+                    continue
+                
+                y_pred = s.model.predict(s.X_test)
+                metrics = evaluate_knn_model(s.model, s.X_test, s.y_test, 'classification')
+                
+                # Convert dict confusion matrix to numpy array
+                cm_dict = metrics.get('confusion_matrix', {})
+                if not cm_dict:
+                    print("Could not compute confusion matrix")
+                    pause()
+                    continue
+                
+                # Get all unique classes to ensure consistent ordering
+                all_classes = sorted(set(s.y_train) | set(s.y_test) | set(y_pred))
+                n_classes = len(all_classes)
+                cm_array = np.zeros((n_classes, n_classes), dtype=int)
+                
+                # Create mapping from class to index
+                class_to_idx = {cls: idx for idx, cls in enumerate(all_classes)}
+                
+                # Fill the confusion matrix array
+                for i, true_cls in enumerate(all_classes):
+                    for j, pred_cls in enumerate(all_classes):
+                        cm_array[i, j] = cm_dict.get(str(true_cls), {}).get(str(pred_cls), 0)
+                
+                # Get class names for display
+                if hasattr(s.model, 'classes_'):
+                    class_names = [str(cls) for cls in s.model.classes_]
+                else:
+                    class_names = [str(cls) for cls in all_classes]
+                
+                try:
+                    plot_confusion_matrix(
+                        cm_array, class_names,
+                        title=f"KNN Confusion Matrix (k={s.k})"
+                    )
+                except Exception as e:
+                    print(f"Error plotting confusion matrix: {e}")
+                
+            else:
+                # Plot regression comparison (1D only)
+                if s.X_train is None or s.X_train.shape[1] != 1:
+                    print("Regression comparison plot requires exactly 1 feature")
+                else:
+                    try:
+                        plot_regression_comparison(
+                            s.model, s.X_train, s.y_train,
+                            s.X_test, s.y_test,
+                            title=f"KNN Regression (k={s.k})"
+                        )
+                    except Exception as e:
+                        print(f"Error plotting regression comparison: {e}")
+            pause()
+            
+        elif choice == 2:
+            if s.model_type == 'classification':
+                # Plot probability distributions
+                if s.X_test is None or s.y_test is None:
+                    print("No test data available")
+                    pause()
+                    continue
+                
+                # Get probabilities and predictions
+                if hasattr(s.model, 'predict_proba'):
+                    try:
+                        probabilities = s.model.predict_proba(s.X_test)
+                        
+                        # Convert y_test to numeric indices for compatibility with plotting function
+                        if hasattr(s.model, 'classes_'):
+                            class_to_idx = {cls: idx for idx, cls in enumerate(s.model.classes_)}
+                            y_test_numeric = np.array([class_to_idx[cls] for cls in s.y_test])
+                            class_names = [str(cls) for cls in s.model.classes_]
+                        else:
+                            # Fallback: use original encoding if model doesn't have classes_
+                            unique_classes = sorted(set(s.y_test))
+                            class_to_idx = {cls: idx for idx, cls in enumerate(unique_classes)}
+                            y_test_numeric = np.array([class_to_idx[cls] for cls in s.y_test])
+                            class_names = [str(cls) for cls in unique_classes]
+                        
+                        plot_class_probability_distributions(
+                            probabilities, y_test_numeric, class_names,
+                            title=f"KNN Probability Distributions (k={s.k})"
+                        )
+                    except Exception as e:
+                        print(f"Error plotting probability distributions: {e}")
+                else:
+                    print("Model does not support probability predictions")
+            else:
+                break  # regression has only 2 options
+            pause()
+            
+        else:
+            break
+
+
 def show_prediction_example(feature_names):
     """
     Interactive single prediction prompt.
@@ -311,6 +476,25 @@ def menu_predict(s: AppState) -> None:
         else:
             break
 
+def configure_split_interactive(s: AppState) -> None:
+    """Configure train/test split parameters (test_size, seed, scaling)."""
+    if s.dataset is None:
+        print("✗ No dataset loaded yet!")
+        return
+    print("\n" + "=" * 70)
+    print("CONFIGURE TRAIN/TEST SPLIT")
+    print("=" * 70)
+    s.test_size = ask_float("Test size (0.05-0.5)", min_val=0.05, max_val=0.5, default=0.2)
+    s.seed = ask_int("Random seed (integer)", min_val=0, max_val=10000, default=42)
+    s.use_scaling = ask_yes_no_recommended("Use feature scaling (standardization)?", recommended=True)
+
+    if s.prepareddata is not None:
+        rebuild_split(s)
+        print("✓ Split configuration updated and split rebuilt")
+    else:
+        print("✓ Split configuration updated (select target to build the split)")
+
+
 def menu_data(s: AppState) -> None:
     """Data handling menu."""
     while True:
@@ -322,7 +506,7 @@ def menu_data(s: AppState) -> None:
             "Load CSV dataset",
             "Manual data input",
             "Select target column",
-            "Clear current data",
+            "Configure train/test split",
             "Back"
         ]
         
@@ -417,21 +601,8 @@ def menu_data(s: AppState) -> None:
             pause()
             
         elif choice == 3:
-            # Clear current data
-            if ask_yes_no("Are you sure you want to clear all data?", False):
-                s.dataset = None
-                s.prepareddata = None
-                s.X_train = None
-                s.X_test = None
-                s.y_train = None
-                s.y_test = None
-                s.train_idx = None
-                s.test_idx = None
-                s.model = None
-                s.metrics.clear()
-                print("✓ All data cleared")
-            else:
-                print("Clear cancelled")
+            # Configure train/test split
+            configure_split_interactive(s)
             pause()
             
         else:

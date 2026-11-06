@@ -1,5 +1,8 @@
 """
 Visualization utilities for K-Nearest Neighbors.
+
+Contains functions for plotting KNN classification boundaries, 
+confusion matrices, probability distributions, and regression results.
 """
 
 import numpy as np
@@ -60,7 +63,7 @@ def plot_classification_boundary_2d(
         # Predict and ensure numeric type
         Z = model.predict(np.c_[xx.ravel(), yy.ravel()])
         # Use safe conversion to avoid string conversion issues
-        if Z.dtype.kind in ['U', 'S']:  # Если модель возвращает строки
+        if Z.dtype.kind in ['U', 'S']:  # If model returns string labels
             Z_numeric = np.array([label_to_int[label] for label in Z]).reshape(xx.shape)
         else:
             # For numeric predictions, use directly with float conversion
@@ -69,7 +72,7 @@ def plot_classification_boundary_2d(
     plt.figure(figsize=(10, 8))
     
     # Plot decision boundary
-    contour = plt.contourf(xx, yy, Z_numeric, alpha=0.8, cmap=plt.cm.RdYlBu)
+    plt.contourf(xx, yy, Z_numeric, alpha=0.8, cmap=plt.cm.RdYlBu)
     
     # Plot training points
     scatter = plt.scatter(X_train[:, 0], X_train[:, 1], c=y_train_numeric, 
@@ -102,6 +105,127 @@ def plot_classification_boundary_2d(
     elif not show:
         # Clean up figure if not showing to prevent memory leaks
         plt.close()
+
+
+def plot_confusion_matrix(cm: np.ndarray, 
+                           class_names: Optional[List[str]] = None,
+                           title: str = "KNN Confusion Matrix") -> None:
+    """
+    Plot confusion matrix heatmap for KNN classification.
+    
+    Args:
+        cm: Confusion matrix (n_classes, n_classes)
+        class_names: Optional list of class names
+        title: Plot title
+    """
+    cm = np.asarray(cm)
+    n = cm.shape[0]
+    
+    if class_names is None:
+        class_names = [str(i) for i in range(n)]
+    elif len(class_names) != n:
+        print(f"Warning: {len(class_names)} class names but matrix has {n} classes. Using default names.")
+        class_names = [str(i) for i in range(n)]
+    
+    fig, ax = plt.subplots(figsize=(max(7, n*1.3), max(6, n*1.1)))
+    im = ax.imshow(cm, cmap=plt.cm.Blues, aspect='auto')
+    
+    # Add text annotations
+    threshold = cm.max() / 2 if cm.max() > 0 else 0
+    for i in range(n):
+        for j in range(n):
+            color = "white" if cm[i, j] > threshold else "black"
+            ax.text(j, i, str(int(cm[i, j])), 
+                   ha="center", va="center", 
+                   color=color, fontsize=12, fontweight='bold')
+    
+    ax.set_xticks(range(n))
+    ax.set_yticks(range(n))
+    ax.set_xticklabels([f"Pred {c}" for c in class_names], rotation=45, ha='right')
+    ax.set_yticklabels([f"True {c}" for c in class_names])
+    ax.set_xlabel("Predicted Label", fontsize=12)
+    ax.set_ylabel("True Label", fontsize=12)
+    ax.set_title(title, fontsize=14, fontweight='bold')
+    
+    # Add colorbar
+    cbar = plt.colorbar(im, ax=ax)
+    cbar.set_label("Count", fontsize=11)
+    
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_class_probability_distributions(probabilities: np.ndarray, 
+                                        y_true: np.ndarray,
+                                        class_names: Optional[List[str]] = None,
+                                        title: str = "KNN Class Probability Distributions") -> None:
+    """
+    Plot probability distributions for each class in KNN classification.
+    
+    Shows histograms of predicted probabilities for samples where the 
+    true label equals each class.
+    
+    Args:
+        probabilities: Predicted probabilities (n_samples, n_classes)
+        y_true: True labels (n_samples,)
+        class_names: Optional list of class names
+        title: Plot title
+    """
+    if probabilities.ndim != 2:
+        print("Error: probabilities must be 2D array (n_samples, n_classes)")
+        return
+    
+    n_classes = probabilities.shape[1]
+    
+    if class_names is None:
+        class_names = [f"Class {i}" for i in range(n_classes)]
+    elif len(class_names) != n_classes:
+        print(f"Warning: {len(class_names)} class names but {n_classes} classes. Using default names.")
+        class_names = [f"Class {i}" for i in range(n_classes)]
+    
+    # Determine grid layout
+    n_cols = min(3, n_classes)
+    n_rows = (n_classes + n_cols - 1) // n_cols  # Ceiling division
+    
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(5*n_cols, 4*n_rows))
+    if n_classes > 1:
+        axes = axes.flatten()
+    else:
+        axes = [axes]
+    
+    # Plot distribution for each class
+    for k in range(n_classes):
+        ax = axes[k]
+        # Get probabilities for samples where true label is class k
+        mask = y_true == k
+        class_probs = probabilities[mask, k]
+        
+        if len(class_probs) == 0:
+            ax.text(0.5, 0.5, f'No samples\nfor {class_names[k]}', 
+                   ha='center', va='center', transform=ax.transAxes, fontsize=12)
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 1)
+        else:
+            ax.hist(class_probs, bins=20, alpha=0.7, color=f'C{k}', edgecolor='black')
+            ax.axvline(np.mean(class_probs), color='red', linestyle='--', linewidth=2,
+                      label=f'Mean: {np.mean(class_probs):.3f}')
+            ax.axvline(0.5, color='gray', linestyle=':', linewidth=1.5, 
+                      label='Threshold 0.5')
+            ax.set_xlim(0, 1)
+            ax.legend(fontsize=9)
+        
+        ax.set_xlabel("Predicted Probability", fontsize=10)
+        ax.set_ylabel("Frequency", fontsize=10)
+        ax.set_title(f"{class_names[k]} (n={len(class_probs)})", fontsize=12, fontweight='bold')
+        ax.grid(True, alpha=0.3)
+    
+    # Hide unused subplots
+    for k in range(n_classes, len(axes)):
+        axes[k].set_visible(False)
+    
+    plt.suptitle(title, fontsize=16, fontweight='bold', y=1.02)
+    plt.tight_layout()
+    plt.show()
 
 
 def plot_regression_comparison(
@@ -193,3 +317,13 @@ def plot_regression_comparison(
         plt.show()
     elif not show:
         plt.close(fig)  # Clean up figure if not showing to prevent memory leaks
+
+
+# Define public API
+__all__ = [
+    'plot_classification_boundary_2d',
+    'plot_regression_comparison',
+    'plot_confusion_matrix',
+    'plot_class_probability_distributions',
+    'plot_true_vs_pred'
+]

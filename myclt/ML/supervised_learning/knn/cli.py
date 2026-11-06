@@ -13,7 +13,7 @@ from .app_state import AppState, print_status, rebuild_split
 from .classifier import KNNClassifier
 from .regressor import KNNRegressor
 from .metrics import evaluate_knn_model
-from .ui import menu_data, menu_train, menu_save_load, menu_evaluate, menu_predict
+from .ui import menu_data, menu_train, menu_save_load, menu_evaluate, menu_predict, menu_visualize
 
 
 def main(s: AppState | None = None):
@@ -27,7 +27,7 @@ def main(s: AppState | None = None):
         s = AppState()
     
     # Explicit menu order for consistent UI
-    MENU_ORDER = ["Data", "Train", "Evaluate", "Predict", "Save/Load"]
+    MENU_ORDER = ["Data", "Train", "Evaluate", "Predict", "Visualize", "Save/Load"]
     
     # Single source of truth for menu actions
     ACTIONS = {
@@ -35,6 +35,7 @@ def main(s: AppState | None = None):
         "Train": partial(menu_train, s),
         "Evaluate": partial(menu_evaluate, s),
         "Predict": partial(menu_predict, s),
+        "Visualize": partial(menu_visualize, s),
         "Save/Load": partial(menu_save_load, s),
     }
     
