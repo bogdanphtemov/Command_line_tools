@@ -7,6 +7,10 @@ from abc import ABC , abstractmethod
 # Universal preprocessing functions (shared by all supervised models)
 # ============================================================================
 
+# Test size bounds used throughout the system
+TEST_SIZE_MIN = 0.05
+TEST_SIZE_MAX = 0.5
+
 def train_test_split(X: np.ndarray, y: np.ndarray, test_size: float, seed: int) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Random split with fixed seed for reproducibility.
@@ -22,8 +26,8 @@ def train_test_split(X: np.ndarray, y: np.ndarray, test_size: float, seed: int) 
     Returns:
         Tuple of (X_train, X_test, y_train, y_test, train_idx, test_idx)
     """
-    if not(0.05 <= test_size <= 0.5):
-        raise ValueError("!test_size should be between 0.05 and 0.5 for this tool!")
+    if not(TEST_SIZE_MIN <= test_size <= TEST_SIZE_MAX):
+        raise ValueError(f"!test_size should be between {TEST_SIZE_MIN} and {TEST_SIZE_MAX} for this tool!")
     
     # we take the number of examples
     n = X.shape[0]
@@ -204,7 +208,7 @@ def universal_rebuild_split(state: Any, train_test_split_fn: Callable,
           - test_size, seed: Split parameters
           - use_scaling: Boolean flag for scaling
           - X_train, X_test, y_train, y_test: Will be set
-          - scaler_mean, scaled_std: Will be set or None
+          - scaler_mean, scaler_std: Will be set or None
           - model: Will be reset to None
           - reset_metrics(): Method to reset all metrics
         train_test_split_fn: Function to split data (X, y, test_size, seed) -> (X_train, X_test, y_train, y_test, train_idx, test_idx)
@@ -229,10 +233,10 @@ def universal_rebuild_split(state: Any, train_test_split_fn: Callable,
         X_train_scaled, mean, std = standardize_fit_fn(X_train)
         X_test_scaled = standardize_apply_fn(X_test, mean, std)
         state.X_train, state.X_test = X_train_scaled, X_test_scaled
-        state.scaler_mean, state.scaled_std = mean, std
+        state.scaler_mean, state.scaler_std = mean, std
     else:
         state.X_train, state.X_test = X_train, X_test
-        state.scaler_mean, state.scaled_std = None, None
+        state.scaler_mean, state.scaler_std = None, None
     
     state.y_train, state.y_test = y_train, y_test
     state.train_idx, state.test_idx = train_idx, test_idx

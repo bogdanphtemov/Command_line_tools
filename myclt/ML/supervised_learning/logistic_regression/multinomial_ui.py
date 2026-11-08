@@ -310,7 +310,7 @@ def predict_single_interactive_multinomial(s: MultinomialAppState) -> None:
     try:
         X_input = show_prediction_example_multiclass(s.prepareddata.feature_names)
         if s.use_scaling and s.scaler_mean is not None:
-            X_input = standardize_apply(X_input.reshape(1, -1), s.scaler_mean, s.scaled_std)[0]
+            X_input = standardize_apply(X_input.reshape(1, -1), s.scaler_mean, s.scaler_std)[0]
         
         proba = s.model.predict_proba(X_input.reshape(1, -1))[0]
         pred = s.model.predict(X_input.reshape(1, -1))[0]
@@ -651,7 +651,7 @@ def menu_predict_multinomial(s: MultinomialAppState) -> None:
                     feature_names=s.prepareddata.feature_names,
                     use_scaling=s.use_scaling,
                     scaler_mean=s.scaler_mean,
-                    scaler_std=s.scaled_std,
+                    scaler_std=s.scaler_std,
                     output_path=output_csv,
                     model_type="multinomial",
                     class_names=s.class_names,

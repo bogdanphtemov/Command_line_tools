@@ -118,8 +118,8 @@ class BaseSessionAdapter(SessionAdapter):
 
         if getattr(app_state, "scaler_mean", None) is not None:
             arrays_dict["scaler_mean"] = app_state.scaler_mean
-        if getattr(app_state, "scaled_std", None) is not None:
-            arrays_dict["scaled_std"] = app_state.scaled_std
+        if getattr(app_state, "scaler_std", None) is not None:
+            arrays_dict["scaler_std"] = app_state.scaler_std
 
         # Model params
         model_params = app_state.model.get_params()
@@ -172,8 +172,8 @@ class BaseSessionAdapter(SessionAdapter):
 
         if getattr(app_state, "scaler_mean", None) is not None:
             arrays_dict["scaler_mean"] = app_state.scaler_mean
-        if getattr(app_state, "scaled_std", None) is not None:
-            arrays_dict["scaled_std"] = app_state.scaled_std
+        if getattr(app_state, "scaler_std", None) is not None:
+            arrays_dict["scaler_std"] = app_state.scaler_std
 
         model_params = app_state.model.get_params()
         if model_params.get("w") is not None:
@@ -270,8 +270,10 @@ class BaseSessionAdapter(SessionAdapter):
         app_state.use_scaling = session_data.use_scaling
         if "scaler_mean" in arrays:
             app_state.scaler_mean = arrays["scaler_mean"]
-        if "scaled_std" in arrays:
-            app_state.scaled_std = arrays["scaled_std"]
+        if "scaler_std" in arrays:
+            app_state.scaler_std = arrays["scaler_std"]
+        elif "scaled_std" in arrays:  # Backward compatibility with old sessions
+            app_state.scaler_std = arrays["scaled_std"]
 
         # Reconstruct train/test split using indices (preferred)
         if session_data.train_indices is not None and session_data.test_indices is not None:
@@ -283,13 +285,13 @@ class BaseSessionAdapter(SessionAdapter):
             X_test_raw = X[test_idx]
 
             # apply scaling if needed
-            if session_data.use_scaling and getattr(app_state, "scaler_mean", None) is not None and getattr(app_state, "scaled_std", None) is not None:
+            if session_data.use_scaling and getattr(app_state, "scaler_mean", None) is not None and getattr(app_state, "scaler_std", None) is not None:
                 if self.preprocessing_module is not None:
                     app_state.X_train = self.preprocessing_module.standardize_apply(
-                        X_train_raw, app_state.scaler_mean, app_state.scaled_std
+                        X_train_raw, app_state.scaler_mean, app_state.scaler_std
                     )
                     app_state.X_test = self.preprocessing_module.standardize_apply(
-                        X_test_raw, app_state.scaler_mean, app_state.scaled_std
+                        X_test_raw, app_state.scaler_mean, app_state.scaler_std
                     )
                 else:
                     app_state.X_train = X_train_raw
@@ -336,6 +338,10 @@ class BaseSessionAdapter(SessionAdapter):
 
         app_state.model = self.model_class()
         app_state.model.set_params(model_params)
+
+        # Validate the restored state to ensure integrity
+        if hasattr(app_state, 'validate'):
+            app_state.validate()
 
     def validate_session(self, session_data: SessionData) -> bool:
         """Validate algorithm-specific requirements."""

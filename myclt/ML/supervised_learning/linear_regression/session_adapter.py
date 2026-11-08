@@ -25,10 +25,14 @@ class LinearRegressionSessionAdapter(BaseSessionAdapter):
         {"name": "lambda_l1", "default": 0.01},
         {"name": "use_l2", "default": False},
         {"name": "lambda_l2", "default": 0.01},
+        {"name": "learning_rate_auto", "default": True},
+        {"name": "early_stopping", "default": True},
     ]
 
     def validate_session(self, session_data: SessionData) -> bool:
-        """Validate Linear Regression specific requirements"""
-        super().validate_session(session_data)
-        # No additional required params beyond base
-        return True
+        """Validate Linear Regression specific requirements.
+        
+        All generic/required checks live in the base adapter; Linear Regression
+        adds no extra *required* hyperparameters (regularization fields are optional).
+        """
+        return super().validate_session(session_data)

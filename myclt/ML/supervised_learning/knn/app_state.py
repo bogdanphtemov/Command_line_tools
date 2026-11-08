@@ -61,7 +61,7 @@ class AppState:
 
     # scaler params (train-fitted)
     scaler_mean: Optional[np.ndarray] = None
-    scaled_std: Optional[np.ndarray] = None
+    scaler_std: Optional[np.ndarray] = None
 
     model: KNNClassifier | KNNRegressor | None = None
     
@@ -130,14 +130,14 @@ class AppState:
         """
         Reset trained model and splits while keeping parameters.
         
-        Note: Also clears scaler_mean/scaled_std. Use reset_fit() if you only need
+        Note: Also clears scaler_mean/scaler_std. Use reset_fit() if you only need
         to clear the model and metrics while preserving the current scaling.
         """
         self.model = None
         self.X_train = self.X_test = None
         self.y_train = self.y_test = None
         self.train_idx = self.test_idx = None
-        self.scaler_mean = self.scaled_std = None
+        self.scaler_mean = self.scaler_std = None
         self.metrics.clear()
     
     def reset_fit(self) -> None:
@@ -204,7 +204,7 @@ def rebuild_split(s: AppState) -> None:
     Sets:
         X_train, X_test, y_train, y_test: Split data arrays
         train_idx, test_idx: Original indices for tracking
-        scaler_mean, scaled_std: Standardization parameters if scaling enabled
+        scaler_mean, scaler_std: Standardization parameters if scaling enabled
         model: Reset to None (data pipeline changed)
         metrics: Cleared via reset_metrics()
         

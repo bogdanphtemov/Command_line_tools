@@ -385,10 +385,10 @@ def predict_single_interactive(s: AppState) -> None:
         X_input = show_prediction_example(s.prepareddata.feature_names)
 
         # Apply scaling if needed
-        if s.use_scaling and s.scaler_mean is not None and s.scaled_std is not None:
+        if s.use_scaling and s.scaler_mean is not None and s.scaler_std is not None:
             X_input = X_input.reshape(1, -1)
             from .preprocessing import standardize_apply
-            X_input = standardize_apply(X_input, s.scaler_mean, s.scaled_std)
+            X_input = standardize_apply(X_input, s.scaler_mean, s.scaler_std)
         else:
             X_input = X_input.reshape(1, -1)
 
@@ -465,7 +465,7 @@ def menu_predict(s: AppState) -> None:
                     feature_names=s.prepareddata.feature_names,
                     use_scaling=s.use_scaling,
                     scaler_mean=s.scaler_mean,
-                    scaler_std=s.scaled_std,
+                    scaler_std=s.scaler_std,
                     output_csv_path=output_csv,
                     model_type=model_type,
                     class_names=class_names,

@@ -14,7 +14,15 @@ dependencies = [
     "send2trash>=1.8.0",
     "numpy>=1.24.0",
     "matplotlib>=3.7.0",
+    "pytest>=8.0.0",
 ]
 
 [tool.setuptools.packages.find]
 include = ["myclt", "myclt.*"]
+
+[tool.pytest.ini_options]
+testpaths = ["myclt/ML/supervised_learning/linear_regression/test_linear_regression"]
+addopts = "-q"
+markers = [
+    "slow: marks tests as slow (do not run with -m \"not slow\")",
+]

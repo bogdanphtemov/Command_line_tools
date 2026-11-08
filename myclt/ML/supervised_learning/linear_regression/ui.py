@@ -13,6 +13,7 @@ from myclt.common.input_validation import (
     ask_choice, ask_int, ask_float, ask_yes_no,
     ask_learning_rate, ask_yes_no_recommended
 )
+from myclt.ML.base_models import TEST_SIZE_MIN, TEST_SIZE_MAX
 from myclt.common.ui_helpers import clear_screen , print_header , pause
 from myclt.ML.session_storage import SessionStorage
 from myclt.ML.batch_predict import batch_predict_from_csv, batch_predict_interactive
@@ -85,7 +86,7 @@ def menu_save_load(s: AppState) -> None:
                 print(f"  - Features: {len(s.prepareddata.feature_names)}")
                 print(f"  - Model: trained")
                 if s.metrics:
-                    metrics_str = ", ".join(f"{k}={v:.4f}" for k, v in s.metrics.items())
+                    metrics_str = ", ".join(f"{k}={v:.4g}" for k, v in s.metrics.items())
                     print(f"  - Metrics: {metrics_str}")
             
             except Exception as e:
@@ -107,7 +108,13 @@ def menu_save_load(s: AppState) -> None:
             
             try:
                 idx = int(input("Select session number: ")) - 1
-                if 0 <= idx < len(sessions):
+            except ValueError:
+                print("!Invalid input: session number must be an integer!")
+                pause()
+                continue
+
+            if 0 <= idx < len(sessions):
+                try:
                     session_dir = f"./ml_sessions/{sessions[idx]}"
                     
                     # Load session
@@ -121,15 +128,13 @@ def menu_save_load(s: AppState) -> None:
                     print(f"  - Features: {len(s.prepareddata.feature_names)}")
                     print(f"  - Model: Ready for predictions")
                     if s.metrics:
-                        metrics_str = ", ".join(f"{k}={v:.4f}" for k, v in s.metrics.items())
+                        metrics_str = ", ".join(f"{k}={v:.4g}" for k, v in s.metrics.items())
                         print(f"  - Metrics: {metrics_str}")
-                else:
-                    print("!Invalid selection!")
-            
-            except ValueError as e:
-                print(f"!Invalid input: {e}!")
-            except Exception as e:
-                print(f"!Error loading session: {e}!")
+                
+                except Exception as e:
+                    print(f"!Error loading session: {e}!")
+            else:
+                print("!Invalid selection!")
             
             pause()
         
@@ -146,7 +151,7 @@ def menu_save_load(s: AppState) -> None:
                         _, arrays = storage.load_session(session_dir, verbose=False)
                         dataset_shape = arrays["dataset"].shape
                         print(f" ✓ {name} (dataset: {dataset_shape})")
-                    except:
+                    except Exception:
                         print(f" ? {name} (corrupted)")
             
             pause()
@@ -229,7 +234,7 @@ def menu_data(s: AppState) -> None:
             ds = s.dataset
             print("\nSummary:")
             print(f"Rows: {ds.data.shape[0]}")
-            print(f"Colums: {ds.data.shape[1]}")
+            print(f"Columns: {ds.data.shape[1]}")
 
             for i , name in enumerate(ds.columns):
                 col = ds.data[:,i]
@@ -250,7 +255,7 @@ def menu_data(s: AppState) -> None:
             pause()
 
         elif choice == 4:
-            s.test_size = ask_float("Test size (0.05-0.5)", min_val=0.05, max_val=0.5, default=0.2)
+            s.test_size = ask_float(f"Test size ({TEST_SIZE_MIN}-{TEST_SIZE_MAX})", min_val=TEST_SIZE_MIN, max_val=TEST_SIZE_MAX, default=0.2)
             s.seed = ask_int("Random seed (integer)", min_val=0, max_val=10000, default=42)
 
             if s.prepareddata is not None:
@@ -286,12 +291,20 @@ def menu_train(s: AppState) -> None:
             print_header("Training Parameters")
             
             s.use_scaling = ask_yes_no_recommended("Enable standardization scaling?", recommended=True)
-            lr_input = ask_learning_rate("Learning rate")
-            if lr_input != 0.0:
+            lr_choice = ask_choice("Learning rate mode", ["Specify manually (recommended for known datasets)", "Auto-tune during training"])
+            if lr_choice == 0:
+                # Manual mode
                 s.learning_rate_auto = False
-                s.learning_rate = lr_input
+                lr_input = ask_learning_rate("Learning rate")
+                # Handle None return from ask_learning_rate (auto-selection case)
+                if lr_input is None:
+                    s.learning_rate_auto = True
+                else:
+                    s.learning_rate = lr_input
             else:
+                # Auto mode
                 s.learning_rate_auto = True
+                s.learning_rate = 0.01  # Keep default as fallback
             s.epochs = ask_int("Max epochs", min_val=100, max_val=1_000_000, default=10000)
             
             # Early stopping is always ON (no prompt)
@@ -401,7 +414,8 @@ def menu_train(s: AppState) -> None:
                     lambda_l2_grid=l2_grid,
                     k_folds=5,
                     seed=s.seed,
-                    verbose=False
+                    verbose=False,
+                    use_scaling=False   # Already scaled by rebuild_split (same as choice 3)
                 )
                 
                 # Display results
@@ -453,6 +467,13 @@ def menu_train(s: AppState) -> None:
                 pause()
                 continue
             
+            # Check minimum training size for CV split and early stopping
+            n_train = len(s.X_train)
+            if n_train < 5:
+                print("!Too few training samples (need >= 5 for CV split / early stopping)!")
+                pause()
+                continue
+            
             # Auto-tune learning rate if needed
             if s.learning_rate_auto:
                 print("\n" + "=" * 72)
@@ -468,8 +489,9 @@ def menu_train(s: AppState) -> None:
                         verbose=True
                     )
                     s.learning_rate = lr_result['best_lr']
+                    s.learning_rate_auto = False  # Remember that we found optimal value
                     print(f"\n=> Learning rate set to: {s.learning_rate}")
-                except RuntimeError as e:
+                except (RuntimeError, ValueError) as e:
                     print(f"!{e}")
                     print("Falling back to default learning rate 0.01.")
                     s.learning_rate = 0.01
@@ -487,7 +509,6 @@ def menu_train(s: AppState) -> None:
             
             # Early stopping is always ON
             # Split training data into train/validation for early stopping
-            n_train = len(s.X_train)
             val_size = int(0.2 * n_train)
             X_train_part = s.X_train[val_size:]
             y_train_part = s.y_train[val_size:]
@@ -499,6 +520,9 @@ def menu_train(s: AppState) -> None:
             model.fit_with_early_stopping(X_train_part, y_train_part, X_val, y_val, patience=patience, verbose=True)
 
             s.model = model
+
+            if not model.is_trained:
+                print("!Warning: Training diverged (weights non-finite). Lower the learning rate!")
 
             s.metrics.clear()
 
@@ -529,7 +553,7 @@ def menu_evaluate(s: AppState) -> None:
         choice = ask_choice("" , options)
 
         if choice == 0:
-            if s.model is None:
+            if s.model is None or not s.model.is_trained:
                 print("!Train the model first!")
                 pause()
                 continue
@@ -539,26 +563,35 @@ def menu_evaluate(s: AppState) -> None:
                 pause()
                 continue
 
-            y_pred = s.model.predict(s.X_test)
-            s.metrics['mse'] = mse(s.y_test , y_pred)
-            s.metrics['rmse'] = rmse(s.y_test , y_pred)
-            s.metrics['r2'] = r2_score(s.y_test , y_pred)
+            try:
+                y_pred = s.model.predict(s.X_test)
+                mse_value = mse(s.y_test, y_pred)
+                rmse_value = rmse(s.y_test, y_pred)
+                r2_value = r2_score(s.y_test, y_pred)
+            except (ValueError, RuntimeError) as e:
+                print(f"!Cannot compute metrics: {e}")
+                pause()
+                continue
+
+            s.metrics['mse'] = mse_value
+            s.metrics['rmse'] = rmse_value
+            s.metrics['r2'] = r2_value
 
             print("\n" + "="*70)
             print("TEST SET METRICS")
             print("="*70)
             print(f"\nMSE (Mean Squared Error)")
-            print(f"  Value: {s.metrics['mse']:.6f}")
+            print(f"  Value: {s.metrics['mse']:.4g}")
             print(f"  → Average of squared errors (lower is better)")
             print(f"  → Penalizes large errors strongly")
             
             print(f"\nRMSE (Root Mean Squared Error)")
-            print(f"  Value: {s.metrics['rmse']:.6f}")
+            print(f"  Value: {s.metrics['rmse']:.4g}")
             print(f"  → Square root of MSE")
             print(f"  → In same units as target y (more intuitive)")
             
             print(f"\nR² (Coefficient of Determination)")
-            print(f"  Value: {s.metrics['r2']:.6f}")
+            print(f"  Value: {s.metrics['r2']:.4g}")
             print(f"  → Proportion of variance explained by model")
             print(f"  → 1.0 = perfect fit, 0.0 = same as predicting mean")
             print(f"  → <0 = worse than predicting mean")
@@ -591,6 +624,8 @@ def menu_evaluate(s: AppState) -> None:
             print("  • 1.0 = perfect predictions")
             print("  • 0.0 = predictions no better than predicting mean value")
             print("  • <0 = worse than predicting mean (model is failing)")
+            print("  • Constant target (all y_true equal): R² = 1.0 for a perfect prediction,")
+            print("    otherwise 0.0 with a warning (R² is undefined in that case)")
             print("  • Use when: need percentage of explained variance")
             
             pause()
@@ -614,7 +649,7 @@ def menu_predict(s: AppState) -> None:
         choice = ask_choice("" , options)
 
         if choice == 0:
-            if s.model is None or s.prepareddata is None:
+            if s.model is None or not s.model.is_trained or s.prepareddata is None:
                 print("!Need trained model and selected features!")
                 pause()
                 continue
@@ -629,8 +664,8 @@ def menu_predict(s: AppState) -> None:
             
             X_new = np.array(vals ,dtype=float).reshape(1 , -1)
 
-            if s.use_scaling and s.scaler_mean is not None and s.scaled_std is not None:
-                X_new = standardize_apply(X_new , s.scaler_mean , s.scaled_std)
+            if s.use_scaling and s.scaler_mean is not None and s.scaler_std is not None:
+                X_new = standardize_apply(X_new , s.scaler_mean , s.scaler_std)
 
             y_hat = float(s.model.predict(X_new)[0])
 
@@ -669,7 +704,7 @@ def menu_predict(s: AppState) -> None:
                     feature_names=s.prepareddata.feature_names,
                     use_scaling=s.use_scaling,
                     scaler_mean=s.scaler_mean,
-                    scaler_std=s.scaled_std,
+                    scaler_std=s.scaler_std,
                     output_path=output_csv,
                     model_type="regression",
                 )
@@ -711,7 +746,7 @@ def menu_visualize(s: AppState) -> None:
             pause()
 
         elif choice == 1:
-            if s.model is None or s.X_test is None or s.y_test is None:
+            if s.model is None or not s.model.is_trained or s.X_test is None or s.y_test is None:
                 print("!Need trained model and test set!")
                 pause()
                 continue
@@ -722,7 +757,7 @@ def menu_visualize(s: AppState) -> None:
             pause()
 
         elif choice == 2:
-            if s.model is None or s.prepareddata is None:
+            if s.model is None or not s.model.is_trained or s.prepareddata is None:
                 print("!Need trained model and selected features!")
                 pause()
                 continue
@@ -732,14 +767,14 @@ def menu_visualize(s: AppState) -> None:
                 continue
                 
             x_raw = s.prepareddata.X[: , 0]
-            y_true = s.prepareddata.y
+            y_true = s.prepareddata.Y
           
             plot_1d_regression(
                 x_raw=x_raw,
                 y_true=y_true,
                 model=s.model,
                 scaler_mean=s.scaler_mean,
-                scaler_std=s.scaled_std,
+                scaler_std=s.scaler_std
             )
             pause()
 

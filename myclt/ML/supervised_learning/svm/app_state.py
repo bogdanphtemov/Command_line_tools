@@ -83,7 +83,7 @@ class AppState:
 
     # Scaler parameters (fitted on training data)
     scaler_mean: Optional[np.ndarray] = None
-    scaled_std: Optional[np.ndarray] = None
+    scaler_std: Optional[np.ndarray] = None
 
     # Trained model (one of LinearSVM, KernelSVM, LinearSVR, KernelSVR, OneVsRestSVM)
     model: Optional[Union[LinearSVM, KernelSVM, LinearSVR, KernelSVR]] = None
