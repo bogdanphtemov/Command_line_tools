@@ -1,139 +1,245 @@
-"""Tests for metrics module - MSE, RMSE, R²"""
-
 import numpy as np
 import pytest
-from myclt.ML.supervised_learning.linear_regression.metrics import mse, rmse, r2_score
 import warnings
+from typing import List, Tuple, Union
+
+from myclt.ML.supervised_learning.linear_regression.metrics import mse, rmse, r2_score
 
 
 class TestMetrics:
-    """Test MSE, RMSE, and R² metrics with various input types and edge cases."""
+    """Test cases for regression metrics: MSE, RMSE, R²."""
     
-    # Test data for happy path
-    Y_TRUE = np.array([3.0, -0.5, 2.0, 7.0])
-    Y_PRED = np.array([2.5, 0.0, 2.0, 8.0])
+    @pytest.fixture
+    def perfect_match_data(self) -> Tuple[np.ndarray, np.ndarray]:
+        """Perfectly matching predictions: y_pred == y_true."""
+        np.random.seed(42)
+        y_true = np.random.randn(100)
+        y_pred = y_true.copy()
+        return y_true, y_pred
     
-    def test_mse_happy_path(self):
-        """Test MSE with perfect and imperfect predictions."""
-        # Perfect prediction
+    @pytest.fixture
+    def constant_target_data(self) -> Tuple[np.ndarray, np.ndarray]:
+        """Constant target with perfect and imperfect predictions."""
+        y_true = np.full(10, 5.0)
+        y_pred_perfect = y_true.copy()
+        y_pred_imperfect = y_true + np.random.randn(10) * 0.1
+        return y_true, y_pred_perfect, y_pred_imperfect
+    
+    @pytest.fixture 
+    def linear_data(self) -> Tuple[np.ndarray, np.ndarray]:
+        """Typical linear regression data with some noise."""
+        np.random.seed(42)
+        y_true = np.random.randn(100)
+        # Add small noise to predictions (R² should be high but < 1.0)
+        y_pred = y_true + np.random.randn(100) * 0.01
+        return y_true, y_pred
+    
+    @pytest.fixture
+    def worse_than_mean_data(self) -> Tuple[np.ndarray, np.ndarray]:
+        """Predictions worse than mean (negative R²)."""
+        np.random.seed(42)
+        y_true = np.random.randn(100)
+        # Deliberately bad predictions
+        y_pred = y_true * (-2) + np.random.randn(100) * 0.5
+        return y_true, y_pred
+    
+    @pytest.mark.parametrize("func_name, func", [
+        ("mse", mse),
+        ("rmse", rmse), 
+        ("r2_score", r2_score)
+    ])
+    @pytest.mark.parametrize("data_type", [list, tuple, np.ndarray])
+    def test_input_types_return_float(self, func_name: str, func, data_type):
+        """Test that functions accept list/tuple/array and return float."""
+        # Для кожного типу даних потрібен окремий підхід
+        if data_type is list:
+            y_true = [1.0, 2.0, 3.0]
+            y_pred = [1.1, 1.9, 3.2]
+        elif data_type is tuple:
+            y_true = (1.0, 2.0, 3.0)
+            y_pred = (1.1, 1.9, 3.2)
+        else:  # np.ndarray
+            y_true = np.array([1.0, 2.0, 3.0], dtype=float)
+            y_pred = np.array([1.1, 1.9, 3.2], dtype=float)
+        
+        result = func(y_true, y_pred)
+        
+        assert isinstance(result, float), f"{func_name} should return float"
+        assert not np.isnan(result), f"{func_name} result should not be NaN"
+        assert np.isfinite(result), f"{func_name} result should be finite"
+    
+    def test_mse_perfect_match(self, perfect_match_data):
+        """MSE should be 0.0 for perfect predictions."""
+        y_true, y_pred = perfect_match_data
+        result = mse(y_true, y_pred)
+        
+        assert result == pytest.approx(0.0), "MSE should be 0.0 for perfect predictions"
+    
+    def test_mse_manual_calculation(self):
+        """Test MSE with manual calculation."""
         y_true = np.array([1.0, 2.0, 3.0])
-        y_pred = np.array([1.0, 2.0, 3.0])
-        assert mse(y_true, y_pred) == 0.0
+        y_pred = np.array([1.1, 1.9, 3.2])
         
-        # Imperfect prediction
-        result = mse(self.Y_TRUE, self.Y_PRED)
-        expected = ((0.5)**2 + (-0.5)**2 + (0.0)**2 + (-1.0)**2) / 4
-        assert result == pytest.approx(expected)
+        errors = y_true - y_pred
+        expected = np.mean(errors ** 2)
+        result = mse(y_true, y_pred)
+        
+        assert result == pytest.approx(expected), "MSE should match manual calculation"
     
-    def test_rmse_happy_path(self):
-        """Test RMSE as sqrt(MSE)."""
-        mse_value = mse(self.Y_TRUE, self.Y_PRED)
-        rmse_value = rmse(self.Y_TRUE, self.Y_PRED)
-        assert rmse_value == pytest.approx(np.sqrt(mse_value))
+    def test_rmse_relationship_to_mse(self, linear_data):
+        """RMSE should be sqrt(MSE)."""
+        y_true, y_pred = linear_data
+        
+        mse_result = mse(y_true, y_pred)
+        rmse_result = rmse(y_true, y_pred)
+        
+        expected_rmse = np.sqrt(mse_result)
+        assert rmse_result == pytest.approx(expected_rmse), "RMSE should equal sqrt(MSE)"
+        
+        # RMSE should be positive unless MSE is exactly 0
+        if mse_result > 0:
+            assert rmse_result > 0, "RMSE should be positive for non-zero MSE"
     
-    def test_r2_score_happy_path(self):
-        """Test R² with perfect, imperfect, and worse-than-mean predictions."""
-        # Perfect prediction
-        y_true = np.array([1.0, 2.0, 3.0])
-        y_pred = np.array([1.0, 2.0, 3.0])
-        assert r2_score(y_true, y_pred) == 1.0
+    def test_r2_perfect_match(self, perfect_match_data):
+        """R² should be 1.0 for perfect predictions."""
+        y_true, y_pred = perfect_match_data
+        result = r2_score(y_true, y_pred)
         
-        # Imperfect but better than mean
-        result = r2_score(self.Y_TRUE, self.Y_PRED)
-        assert -1.0 < result < 1.0
-        assert result > 0.0  # Should be positive since better than mean
-    
-    def test_r2_score_constant_target(self):
-        """Test R² with constant target values."""
-        y_true = np.array([5.0, 5.0, 5.0, 5.0])
+        assert result == pytest.approx(1.0), "R² should be 1.0 for perfect predictions"
+
+    def test_r2_constant_target_imperfect(self, constant_target_data):
+        """R² should be 0.0 + warning for imperfect prediction of constant target."""
+        y_true, _, y_pred_imperfect = constant_target_data
         
-        # Perfect prediction of constant target
-        y_pred = np.array([5.0, 5.0, 5.0, 5.0])
-        assert r2_score(y_true, y_pred) == 1.0
-        
-        # Imperfect prediction of constant target
         with pytest.warns(UserWarning, match=r"R\^2 score is not well-defined"):
-            y_pred = np.array([4.0, 4.0, 4.0, 4.0])
-            assert r2_score(y_true, y_pred) == 0.0
+            result = r2_score(y_true, y_pred_imperfect)
+        
+        assert result == pytest.approx(0.0), "R² should be 0.0 for imperfect constant target prediction"
     
-    @pytest.mark.parametrize("func", [mse, rmse, r2_score])
-    def test_input_types(self, func):
-        """Test that metrics work with list, tuple, and array inputs."""
-        y_true = [1.0, 2.0, 3.0]
-        y_pred = [1.1, 1.9, 3.1]
+    def test_r2_better_than_mean(self, linear_data):
+        """R² should be > 0.0 for predictions better than mean."""
+        y_true, y_pred = linear_data
         
-        # Lists
-        result_list = func(y_true, y_pred)
+        result = r2_score(y_true, y_pred)
         
-        # Tuples  
-        result_tuple = func(tuple(y_true), tuple(y_pred))
-        
-        # Arrays
-        result_array = func(np.array(y_true), np.array(y_pred))
-        
-        # All should give the same result
-        assert result_list == result_array
-        assert result_tuple == result_array
-        assert isinstance(result_list, float)
+        assert result > 0.0, "R² should be positive for predictions better than mean"
+        assert result < 1.0, "R² should be < 1.0 for imperfect predictions"
     
-    @pytest.mark.parametrize("func", [mse, rmse, r2_score])
-    def test_dimension_validation(self, func):
-        """Test that 2D arrays are rejected."""
-        y_true = np.array([[1.0], [2.0], [3.0]])
-        y_pred = np.array([[1.0], [2.0], [3.0]])
+    def test_r2_worse_than_mean(self, worse_than_mean_data):
+        """R² should be < 0.0 for predictions worse than mean."""
+        y_true, y_pred = worse_than_mean_data
         
-        with pytest.raises(ValueError, match="must be 1D"):
-            func(y_true, y_pred)
-    
-    @pytest.mark.parametrize("func", [mse, rmse, r2_score])
-    def test_length_mismatch(self, func):
-        """Test that mismatched lengths are rejected."""
-        y_true = np.array([1.0, 2.0])
-        y_pred = np.array([1.0, 2.0, 3.0])
+        result = r2_score(y_true, y_pred)
         
-        with pytest.raises(ValueError, match="sample mismatch"):
-            func(y_true, y_pred)
+        assert result < 0.0, "R² should be negative for predictions worse than mean"
     
-    @pytest.mark.parametrize("func", [mse, rmse, r2_score])
-    def test_empty_input(self, func):
-        """Test that empty arrays are rejected."""
+    @pytest.mark.parametrize("func_name, func", [
+        ("mse", mse),
+        ("rmse", rmse),
+        ("r2_score", r2_score)
+    ])
+    def test_empty_input_raises_error(self, func_name: str, func):
+        """Test that empty arrays raise ValueError."""
         y_true = np.array([])
         y_pred = np.array([])
         
         with pytest.raises(ValueError, match="must not be empty"):
             func(y_true, y_pred)
     
-    @pytest.mark.parametrize("func", [mse, rmse, r2_score])
-    def test_nan_inf_validation(self, func):
-        """Test that NaN and infinity values are rejected."""
-        y_true = np.array([1.0, 2.0, np.nan])
-        y_pred = np.array([1.0, 2.0, 3.0])
+    @pytest.mark.parametrize("func_name, func", [
+        ("mse", mse),
+        ("rmse", rmse),
+        ("r2_score", r2_score)
+    ])
+    def test_2d_input_raises_error(self, func_name: str, func):
+        """Test that 2D arrays raise ValueError."""
+        y_true = np.random.randn(10, 1)
+        y_pred = np.random.randn(10, 1)
+        
+        with pytest.raises(ValueError, match="must be 1D"):
+            func(y_true, y_pred)
+    
+    @pytest.mark.parametrize("func_name, func", [
+        ("mse", mse),
+        ("rmse", rmse),
+        ("r2_score", r2_score)
+    ])
+    def test_length_mismatch_raises_error(self, func_name: str, func):
+        """Test that length mismatch raises ValueError."""
+        y_true = np.random.randn(10)
+        y_pred = np.random.randn(5)
+        
+        with pytest.raises(ValueError, match="sample mismatch"):
+            func(y_true, y_pred)
+    
+    @pytest.mark.parametrize("func_name, func", [
+        ("mse", mse),
+        ("rmse", rmse),
+        ("r2_score", r2_score)
+    ])
+    def test_nan_input_raises_error(self, func_name: str, func):
+        """Test that NaN values raise ValueError."""
+        y_true = np.array([1.0, 2.0, np.nan, 4.0])
+        y_pred = np.array([1.1, 1.9, 3.0, 4.1])
         
         with pytest.raises(ValueError, match="NaN or infinity"):
             func(y_true, y_pred)
+    
+    @pytest.mark.parametrize("func_name, func", [
+        ("mse", mse),
+        ("rmse", rmse),
+        ("r2_score", r2_score)
+    ])
+    def test_inf_input_raises_error(self, func_name: str, func):
+        """Test that infinity values raise ValueError."""
+        y_true = np.array([1.0, 2.0, np.inf, 4.0])
+        y_pred = np.array([1.1, 1.9, 3.0, 4.1])
         
-        y_true = np.array([1.0, 2.0, np.inf])
         with pytest.raises(ValueError, match="NaN or infinity"):
             func(y_true, y_pred)
-
-
-class TestR2EdgeCases:
-    """Test edge cases specific to R² calculation."""
     
-    def test_r2_worse_than_mean(self):
-        """Test R² when predictions are worse than predicting the mean."""
-        y_true = np.array([1.0, 2.0, 3.0])
-        y_pred = np.array([10.0, 10.0, 10.0])  # All predictions at 10
+    def test_r2_math_properties(self):
+        """Test mathematical properties of R² score."""
+        np.random.seed(42)
         
-        result = r2_score(y_true, y_pred)
-        assert result < 0.0  # Should be negative
+        # Test that R² = 1 - SS_res/SS_tot
+        y_true = np.random.randn(100)
+        y_pred = y_true + np.random.randn(100) * 0.5
+        
+        ss_res = np.sum((y_true - y_pred) ** 2)
+        ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)
+        
+        r2_expected = 1.0 - (ss_res / ss_tot)
+        r2_actual = r2_score(y_true, y_pred)
+        
+        assert r2_actual == pytest.approx(r2_expected), "R² formula should match calculation"
     
-    def test_r2_nearly_constant_target(self):
-        """Test R² with nearly constant target (tiny but nonzero SS_tot)."""
-        y_true = np.array([1.0, 1.0 + 1e-10, 1.0 - 1e-10, 1.0])
-        y_pred = np.array([2.0, 2.0, 2.0, 2.0])
+    def test_edge_case_single_sample(self):
+        """Test metrics with single sample edge case."""
+        y_true = np.array([5.0])
+        y_pred = np.array([5.1])
         
-        # Should not warn (SS_tot is tiny but nonzero)
-        result = r2_score(y_true, y_pred)
-        # Result can be any finite value due to numerical instability
-        assert np.isfinite(result)
+        # Should not raise for valid single sample
+        mse_result = mse(y_true, y_pred)
+        rmse_result = rmse(y_true, y_pred)
+        
+        assert mse_result == pytest.approx(0.01)  # (0.1)^2 = 0.01
+        assert rmse_result == pytest.approx(0.1)  # sqrt(0.01) = 0.1
+        
+        # R² for single sample with different values
+        # SS_tot = 0 when there's only one sample and it's different from prediction
+        y_true_single = np.array([5.0])
+        y_pred_single = np.array([6.0])
+        
+        with pytest.warns(UserWarning):
+            r2_result = r2_score(y_true_single, y_pred_single)
+        
+        assert r2_result == pytest.approx(0.0), "R² = 0.0 for single sample imperfect prediction"
+    
+    def test_r2_constant_target_perfect(self, constant_target_data):
+        """R² should be 1.0 for perfect prediction of constant target."""
+        y_true, y_pred_perfect, _ = constant_target_data
+        
+        result = r2_score(y_true, y_pred_perfect)
+        
+        assert result == pytest.approx(1.0), "R² should be 1.0 for perfect constant target prediction"

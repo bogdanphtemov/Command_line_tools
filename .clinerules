@@ -1,0 +1,21 @@
+# CLINE AGENT BEHAVIOR & CODE INTEGRITY RULES
+
+## 1. FILE EDITING & CODE DEGRADATION PREVENTION 🚨
+- **NEVER** use `write_to_file` on existing files if they contain more than 50 lines of code. Always prefer `replace_in_file`.
+- **NEVER** output placeholder comments like `// rest of code here`, `// ... existing code ...`, or truncate the file contents under any circumstances.
+- **ALWAYS** ensure that when modifying code, the indentation, bracket matching, and character encoding (UTF-8) match the existing file perfectly.
+- **INCREMENTAL EDITS:** If a task requires extensive modification of a large file, you MUST split the changes into multiple, sequential `replace_in_file` block calls. Do not attempt to refactor everything in a single massive block.
+
+## 2. PLANNING BEFORE ACTING (THINKING PROTOCOL) 🧠
+- Before making any terminal calls or modifying files, you **MUST** formulate a brief mental plan.
+- If a task is complex or affects multiple files, explicitly list your step-by-step strategy to the user and wait for confirmation if the task seems high-risk.
+- Do not make assumptions about the codebase structure; use `search_files` or `read_file` to verify facts first.
+
+## 3. TERMINAL & EXECUTION COMMANDS 💻
+- **NEVER** run commands that can block the terminal indefinitely (e.g., running dev servers like `npm run dev` or `python app.py` without a background/timeout flag if it prevents further tool execution).
+- After editing code that impacts compiling or testing, you **SHOULD** run the appropriate build/test command (e.g., `npm run build`, `pytest`, `cargo check`) via `execute_command` to verify your changes did not break the project.
+
+## 4. CODE STYLE & QUALITY STANDARDS 🛠️
+- Maintain the exact styling patterns of the current file (tabs vs spaces, semi-colons, naming conventions).
+- Keep functions modular and avoid introducing nested duplicate logic.
+- Ensure all new features or bug fixes include basic error handling (try/catch, explicit error returns).

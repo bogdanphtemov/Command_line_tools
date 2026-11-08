@@ -1,238 +1,278 @@
-"""
-Test helpers for linear regression module.
-
-This module provides utility functions and constants that can be used
-across all test modules to ensure consistency and avoid duplication.
-"""
-
 import numpy as np
+from unittest.mock import patch, MagicMock
+from io import StringIO
+from typing import List, Dict, Any, Optional, Union
 import tempfile
-import shutil
-from pathlib import Path
-from typing import Optional, Dict, Any
-from unittest.mock import patch, Mock
+import json
 
-from myclt.ML.supervised_learning.linear_regression.app_state import AppState, rebuild_split
+import pytest
+
+from myclt.ML.supervised_learning.linear_regression.app_state import AppState
 from myclt.ML.supervised_learning.linear_regression.data import Dataset, Prepareddata
 from myclt.ML.supervised_learning.linear_regression.core import LinearRegressionGD
-from myclt.ML.supervised_learning.linear_regression.metrics import mse, rmse, r2_score
+from myclt.ML.supervised_learning.linear_regression.session_adapter import LinearRegressionSessionAdapter
+from myclt.ML.session_storage import SessionStorage
 
 
-# Paths configuration - test is in test_linear_regression/
-PROJECT_ROOT = Path(__file__).parents[5]
-DATASETS_DIR = PROJECT_ROOT / "assets" / "test_datasets" / "linear_regression_datasets(multiple_linear_regression_datasets)"
+class UIDriver:
+    """Helper for mocking UI interactions in tests
 
-# Dataset specifications for testing
-DATASET_SPECS = {
-    'marketing': {
-        'features': ['ad_budget_usd'],
-        'target': 'sales_usd',
-        'r2_threshold': 0.80,
-        'size': 2500
-    },
-    'real_estate': {
-        'features': ['sqft', 'bedrooms', 'bathrooms', 'year_built', 'distance_to_city_center_miles'],
-        'target': 'price_usd',
-        'r2_range': (0.63, 0.85),
-        'size': 3500
-    },
-    'lifestyle': {
-        'features': ['age', 'income_usd', 'work_hours', 'exercise_hours', 'screen_time_hours'],
-        'target': 'happiness_score',
-        'r2_range': (0.45, 0.68),
-        'size': 4200
-    }
-}
-
-# Thresholds for model performance validation
-MARKETING_R2_THRESHOLD = 0.80
-REAL_ESTATE_R2_RANGE = (0.63, 0.85)
-LIFESTYLE_R2_RANGE = (0.45, 0.68)
-
-
-def train_like_ui(state: AppState, patience: int = 50) -> None:
+    Simulates user input for UI functions by predefining a queue of responses.
     """
-    Train model following the UI workflow with early stopping.
     
-    Args:
-        state: AppState with prepared data
-        patience: Early stopping patience
-    """
-    if state.model is None:
-        state.model = LinearRegressionGD()
+    def __init__(self):
+        self.choose_queue: List[int] = []
+        self.answer_queue: List[str] = []
+        self.int_queue: List[int] = []
+        self.float_queue: List[float] = []
+        self.lr_queue: List[Optional[float]] = []  # learning_rate can be None for auto
+        self.type_queue: List[str] = []  # For raw input() calls
     
-    # Set regularization if configured
-    if state.use_l1:
-        state.model.use_l1 = True
-        state.model.lambda_l1 = state.lambda_l1
-    if state.use_l2:
-        state.model.use_l2 = True
-        state.model.lambda_l2 = state.lambda_l2
+    def choose(self, values: List[int]) -> 'UIDriver':
+        """Queue menu choices (integers)."""
+        self.choose_queue.extend(values)
+        return self
     
-    # Configure learning rate
-    lr = None if state.learning_rate_auto else state.learning_rate
+    def answer(self, values: List[str]) -> 'UIDriver':
+        """Queue yes/no answers."""
+        self.answer_queue.extend(values)
+        return self
     
-    # Fit with early stopping
-    state.model.fit_with_early_stopping(
-        state.X_train, 
-        state.y_train, 
-        epochs=state.epochs,
-    """
-    if state.model is None or not state.model.is_trained:
-        raise RuntimeError("No trained model available")
-    if state.X_test is None or state.y_test is None:
-        raise RuntimeError("Test set not available")
+    def give_int(self, values: List[int]) -> 'UIDriver':
+        """Queue integer inputs."""
+        self.int_queue.extend(values)
+        return self
+    
+    def give_float(self, values: List[float]) -> 'UIDriver':
+        """Queue float inputs."""
+        self.float_queue.extend(values)
+        return self
+    
+    def give_lr(self, values: List[Optional[float]]) -> 'UIDriver':
+        """Queue learning rate inputs."""
+        self.lr_queue.extend(values)
+        return self
+    
+    def type(self, values: List[str]) -> 'UIDriver':
+        """Queue raw typed inputs."""
+        self.type_queue.extend(values)
+        return self
+    
+    def run(self, func, state: AppState, monkeypatch=None) -> str:
+        """Run a UI function with mocked inputs, return captured output.
         
-    y_pred = state.model.predict(state.X_test)
-    
-    return {
-        'mse': mse(state.y_test, y_pred),
-        'rmse': rmse(state.y_test, y_pred),
-        'r2': r2_score(state.y_test, y_pred)
-    }
-
-
-def assert_metrics_match(expected: Dict[str, float], actual: Dict[str, float], 
-                        rtol: float = 1e-6) -> None:
-    """
-    Assert that two metrics dicts match approximately.
-    
-    Args:
-        expected: Expected metrics dictionary
-        actual: Actual metrics dictionary
-        rtol: Relative tolerance for comparison
-    """
-    assert set(expected.keys()) == set(actual.keys())
-    for key in expected:
-        assert actual[key] == pytest.approx(expected[key], rel=rtol)
-
-
-def session_roundtrip(state: AppState, session_dir: Path) -> AppState:
-    """
-    Helper to save and load a session.
-    
-    Args:
-        state: AppState to save
-        session_dir: Directory for session files
+        Requires monkeypatch fixture from test.
+        """
+        if monkeypatch is None:
+            raise ValueError("monkeypatch fixture required")
+            
+        output = StringIO()
         
-    Returns:
-        New AppState loaded from session
-    """
-    from myclt.ML.session_storage import SessionStorage
-    from myclt.ML.supervised_learning.linear_regression.session_adapter import LinearRegressionSessionAdapter
+        # Mock functions in the ui module
+        from myclt.ML.supervised_learning.linear_regression import ui
+        
+        def mock_ask_choice(prompt, options):
+            if not self.choose_queue:
+                raise RuntimeError("No more choice responses queued")
+            return self.choose_queue.pop(0)
+        
+        def mock_ask_int(prompt, min_val=None, max_val=None, default=None):
+            if not self.int_queue:
+                raise RuntimeError("No more int responses queued")
+            return self.int_queue.pop(0)
+        
+        def mock_ask_float(prompt, min_val=None, max_val=None, default=None):
+            if not self.float_queue:
+                raise RuntimeError("No more float responses queued")
+            return self.float_queue.pop(0)
+        
+        def mock_ask_yes_no(prompt):
+            if not self.answer_queue:
+                raise RuntimeError("No more yes/no responses queued")
+            answer = self.answer_queue.pop(0).lower()
+            return answer in ('y', 'yes', 'true')
+        
+        def mock_ask_yes_no_recommended(prompt, recommended):
+            return mock_ask_yes_no(prompt)
+        
+        def mock_ask_learning_rate(prompt):
+            if not self.lr_queue:
+                raise RuntimeError("No more learning rate responses queued")
+            return self.lr_queue.pop(0)
+        
+        def mock_input(prompt=""):
+            if not self.type_queue:
+                raise RuntimeError("No more type responses queued")
+            return self.type_queue.pop(0)
+        
+        # Setup monkeypatching
+        monkeypatch.setattr(ui, "ask_choice", mock_ask_choice)
+        monkeypatch.setattr(ui, "ask_int", mock_ask_int)
+        monkeypatch.setattr(ui, "ask_float", mock_ask_float)
+        monkeypatch.setattr(ui, "ask_yes_no", mock_ask_yes_no)
+        monkeypatch.setattr(ui, "ask_yes_no_recommended", mock_ask_yes_no_recommended)
+        monkeypatch.setattr(ui, "ask_learning_rate", mock_ask_learning_rate)
+        
+        # Patch input and stdout
+        monkeypatch.setattr("builtins.input", mock_input)
+        monkeypatch.setattr("sys.stdout", output)
+        
+        # Run the function
+        try:
+            func(state)
+        except SystemExit:
+            pass  # Expected for exit operations
+        
+        return output.getvalue()
+
+
+def session_roundtrip(state: AppState, session_dir) -> AppState:
+    """Test session save/load cycle.
     
-    storage = SessionStorage()
+    Extract -> Save -> Load -> Restore into new AppState.
+    """
     adapter = LinearRegressionSessionAdapter()
+    storage = SessionStorage()
     
-    # Extract and save
+    # Extract session data
     session_data, arrays_dict = adapter.extract(state)
-    storage.save_session(session_data, session_dir, arrays_dict, verbose=False)
     
-    # Load into new state
-    new_state = type(state)()
-    loaded_data, loaded_arrays = storage.load_session(session_dir, verbose=False)
-    adapter.restore(loaded_data, loaded_arrays, new_state)
+    # Save session
+    storage.save_session(session_data, str(session_dir), arrays_dict, verbose=False)
+    
+    # Load session
+    loaded_session_data, loaded_arrays = storage.load_session(str(session_dir), verbose=False)
+    
+    # Create new state and restore
+    new_state = AppState()
+    adapter.restore(loaded_session_data, loaded_arrays, new_state)
     
     return new_state
 
 
-def load_dataset_xy(name: str) -> tuple:
-    """
-    Load dataset and return (X, y, features, target).
+def build_prepared(n_features: int, n_samples: int = 100, has_target: bool = True, 
+                   seed: int = 42) -> Prepareddata:
+    """Factory for creating Prepareddata instances for testing."""
+    np.random.seed(seed)
     
-    Args:
-        name: Dataset name (marketing, real_estate, lifestyle)
+    # Generate random features
+    X = np.random.randn(n_samples, n_features)
+    
+    # Generate target with linear relationship plus noise
+    if has_target:
+        coefficients = np.random.randn(n_features)
+        intercept = np.random.randn()
+        y = X @ coefficients + intercept + 0.1 * np.random.randn(n_samples)
         
-    Returns:
-        Tuple of (X, y, feature_names, target_name)
-    """
-    from myclt.ML.supervised_learning.linear_regression.data import load_csv_dataset
+        # Create column names
+        feature_names = [f"feature_{i+1}" for i in range(n_features)]
+        target_name = "target"
+    else:
+        y = None
+        feature_names = [f"feature_{i+1}" for i in range(n_features)]
+        target_name = None
     
-    spec = DATASET_SPECS[name]
-    path = DATASETS_DIR / f"{name}_dataset.csv"
-    
-    dataset = load_csv_dataset(str(path))
-    X = dataset.data[:, :-1].astype(float)
-    y = dataset.data[:, -1].astype(float)
-    
-    return X, y, spec['features'], spec['target']
-
-
-class UIDriver:
-    """Helper class for running UI functions with mocked inputs."""
-    
-    def __init__(self):
-        self.mock_inputs = []
-        self.mock_choices = []
-        self.mock_answers = []
-        self.mock_ints = []
-        self.mock_floats = []
-        self.mock_lrs = []
-    
-    def choose(self, *choices):
-        """Queue choices for ask_choice calls."""
-        self.mock_choices.extend(choices)
-        return self
-    
-    def answer(self, *answers):
-        """Queue answers for ask_yes_no calls."""
-        self.mock_answers.extend(answers)
-        return self
-    
-    def give_int(self, *ints):
-        """Queue integers for ask_int calls."""
-        self.mock_ints.extend(ints)
-        return self
-    
-    def give_float(self, *floats):
-        """Queue floats for ask_float calls."""
-        self.mock_floats.extend(floats)
-        return self
-    
-    def give_lr(self, *lrs):
-        """Queue learning rates for ask_learning_rate calls."""
-        self.mock_lrs.extend(lrs)
-        return self
-    
-    def type(self, *inputs):
-        """Queue strings for input calls."""
-        self.mock_inputs.extend(inputs)
-        return self
-    
-    def run(self, func, state, *args, **kwargs):
-        """
-        Run a UI function with mocked inputs.
-        
-        Args:
-            func: UI function to run
-            state: AppState to use
-            *args: Additional args for func
-            **kwargs: Additional kwargs for func
-            
-        Returns:
-            Captured stdout output
-        """
-        from io import StringIO
-        from contextlib import redirect_stdout
-        from unittest.mock import patch
-        
-        choices = list(self.mock_choices)
-        answers = list(self.mock_answers)
-        ints = list(self.mock_ints)}
-
-import pytest
-        learning_rate=lr,
-        patience=patience,
-        verbose=False
+    return Prepareddata(
+        X=X,
+        Y=y,
+        feature_names=feature_names,
+        target_name=target_name
     )
 
 
-def evaluate_like_ui(state: AppState) -> Dict[str, float]:
+def make_app_state(dataset: Optional[Dataset] = None, prepareddata: Optional[Prepareddata] = None,
+                  n_features: int = 3, n_samples: int = 100, test_size: float = 0.2,
+                  seed: int = 42, use_scaling: bool = True) -> AppState:
+    """Factory for creating AppState instances for testing."""
+    state = AppState(
+        test_size=test_size,
+        seed=seed,
+        use_scaling=use_scaling
+    )
+    
+    # Create dataset and prepareddata if not provided
+    if dataset is None:
+        prepareddata = prepareddata or build_prepared(n_features, n_samples)
+        
+        # Create synthetic dataset to match prepareddata
+        # We need to create the full data matrix including target
+        if prepareddata.Y is not None:
+            data = np.column_stack([prepareddata.X, prepareddata.Y])
+            columns = prepareddata.feature_names + [prepareddata.target_name]
+        else:
+            data = prepareddata.X
+            columns = prepareddata.feature_names
+            
+        dataset = Dataset(data=data, columns=columns)
+    
+    state.dataset = dataset
+    state.prepareddata = prepareddata or build_prepared(n_features, n_samples)
+    
+    # Build the split
+    from myclt.ML.supervised_learning.linear_regression.app_state import rebuild_split
+    rebuild_split(state)
+    
+    return state
+
+
+def assert_metric_dict_equal(expected: Dict[str, float], actual: Dict[str, float], 
+                            rtol: float = 1e-7, atol: float = 1e-10) -> None:
+    """Assert that two metric dictionaries are approximately equal.
+    
+    Uses np.testing.assert_allclose for numeric comparison.
     """
-    Evaluate model like ui.menu_evaluate - returns metrics dict.
+    assert set(expected.keys()) == set(actual.keys()), \
+        f"Key mismatch: expected {set(expected.keys())}, got {set(actual.keys())}"
+    
+    for key in expected:
+        np.testing.assert_allclose(
+            expected[key], actual[key], rtol=rtol, atol=atol,
+            err_msg=f"Metric '{key}' mismatch"
+        )
+
+
+def make_linear_xy(n_samples: int = 100, n_features: int = 1, noise: float = 0.1,
+                   weights: Optional[np.ndarray] = None, bias: float = 1.0, 
+                   seed: int = 42) -> tuple[np.ndarray, np.ndarray]:
+    """Generate synthetic linear data for testing.
     
     Args:
-        state: AppState with trained model and test data
+        n_samples: Number of samples
+        n_features: Number of features  
+        noise: Standard deviation of Gaussian noise
+        weights: Custom weights (if None, random weights are generated)
+        bias: Intercept term
+        seed: Random seed for reproducibility
         
     Returns:
-        Dictionary of metrics: mse, rmse, r2
+        tuple: (X, y) where X has shape (n_samples, n_features), y has shape (n_samples,)
+    """
+    np.random.seed(seed)
+    
+    # Generate random features
+    X = np.random.randn(n_samples, n_features)
+    
+    # Generate weights if not provided
+    if weights is None:
+        weights = np.random.randn(n_features)
+    
+    # Generate target with linear relationship
+    y = X @ weights + bias
+    
+    # Add noise
+    if noise > 0:
+        y += noise * np.random.randn(n_samples)
+    
+    return X, y
+
+
+def create_model_with_params(n_features: int, learning_rate: float = 0.01, 
+                            epochs: int = 100, lambda_l1: float = 0.0, 
+                            lambda_l2: float = 0.0) -> LinearRegressionGD:
+    """Helper to create a LinearRegressionGD model with specific parameters."""
+    return LinearRegressionGD(
+        learning_rate=learning_rate,
+        epochs=epochs,
+        lambda_l1=lambda_l1,
+        lambda_l2=lambda_l2
+    )
