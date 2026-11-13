@@ -89,8 +89,11 @@ class UIDriver:
         def mock_ask_yes_no(prompt):
             if not self.answer_queue:
                 raise RuntimeError("No more yes/no responses queued")
-            answer = self.answer_queue.pop(0).lower()
-            return answer in ('y', 'yes', 'true')
+            answer = self.answer_queue.pop(0)
+            # Handle both strings and booleans
+            if isinstance(answer, bool):
+                return answer
+            return answer.lower() in ('y', 'yes', 'true')
         
         def mock_ask_yes_no_recommended(prompt, recommended):
             return mock_ask_yes_no(prompt)
@@ -101,6 +104,10 @@ class UIDriver:
             return self.lr_queue.pop(0)
         
         def mock_input(prompt=""):
+            # Automatically handle pause() calls by default
+            if prompt and ("continue" in prompt.lower() or "press" in prompt.lower()):
+                return ""  # Empty string for pause prompts
+            
             if not self.type_queue:
                 raise RuntimeError("No more type responses queued")
             return self.type_queue.pop(0)

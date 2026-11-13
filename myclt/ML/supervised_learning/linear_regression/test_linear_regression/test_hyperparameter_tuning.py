@@ -239,16 +239,17 @@ class TestGridSearchRegularization:
         X = np.random.randn(30, 2)
         y = 2 * X[:, 0] + 1.5 * X[:, 1] + 1
         
-        # Use extremely large learning rate and disable early stopping to force divergence
+        # Use extremely large learning rate (guaranteed to diverge) and more epochs
         with pytest.raises(RuntimeError, match="All regularization combinations diverged"):
             grid_search_regularization(
                 X, y,
-                learning_rate=1000.0,  # Extremely large learning rate
+                learning_rate=100000.0,  # Extremely large learning rate (guaranteed to diverge)
                 lambda_l1_grid=[0.0],
                 lambda_l2_grid=[0.0],
                 k_folds=2,
-                epochs=10,
-                early_stopping=False  # Disable to ensure divergence
+                epochs=50,  # More epochs to ensure divergence
+                early_stopping=False,  # Disable to ensure divergence
+                use_scaling=False  # Disable scaling to make divergence more likely
             )
 
     def test_verbose_output(self, tiny_dataset, capsys):

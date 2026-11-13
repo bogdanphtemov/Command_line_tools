@@ -226,8 +226,8 @@ class TestSelectFeaturesAndTarget:
         # Indices: Age=0, Income=1, Experience=2, Salary=3
         # So selecting Salary (3) as target should leave features [0,1,2]
         with patch("builtins.input", return_value=""):  # Mock input for feature list
-            with patch("myclt.common.input_validation.ask_int", return_value=4):  # Target index (4 for Salary since ask_int is 1-based)
-                with patch("myclt.common.input_validation.ask_yes_no", return_value=False):  # Auto features
+            with patch("myclt.ML.base.base_data.ask_int", return_value=4):  # Target index (4 for Salary since ask_int is 1-based)
+                with patch("myclt.ML.base.base_data.ask_yes_no", return_value=False):  # Auto features
                     prepared = select_features_and_target(sample_dataset)
         
         # Verify selection
@@ -245,9 +245,9 @@ class TestSelectFeaturesAndTarget:
         # User will select columns 2 and 3 (which are Income and Experience)
         
         # Mock target selection first (selecting Salary - column 4 since ask_int is 1-based)
-        with patch("myclt.common.input_validation.ask_int", return_value=4):
+        with patch("myclt.ML.base.base_data.ask_int", return_value=4):
             # Mock "yes" for manual feature selection
-            with patch("myclt.common.input_validation.ask_yes_no", return_value=True):
+            with patch("myclt.ML.base.base_data.ask_yes_no", return_value=True):
                 # Mock feature selection input ("2,3" for Income and Experience)
                 with patch("builtins.input", return_value="2,3"):
                     prepared = select_features_and_target(sample_dataset)
@@ -268,8 +268,8 @@ class TestSelectFeaturesAndTarget:
         ]
         
         with patch("builtins.input", side_effect=input_sequence):
-            with patch("myclt.common.input_validation.ask_int", return_value=3):
-                with patch("myclt.common.input_validation.ask_yes_no", return_value=True):
+            with patch("myclt.ML.base.base_data.ask_int", return_value=3):
+                with patch("myclt.ML.base.base_data.ask_yes_no", return_value=True):
                     with pytest.raises(ValueError, match="Target column cannot be included"):
                         select_features_and_target(sample_dataset)
 
@@ -282,8 +282,8 @@ class TestSelectFeaturesAndTarget:
         ]
         
         with patch("builtins.input", side_effect=input_sequence):
-            with patch("myclt.common.input_validation.ask_int", return_value=3):
-                with patch("myclt.common.input_validation.ask_yes_no", return_value=True):
+            with patch("myclt.ML.base.base_data.ask_int", return_value=3):
+                with patch("myclt.ML.base.base_data.ask_yes_no", return_value=True):
                     with pytest.raises(ValueError, match="at least 1 feature"):
                         select_features_and_target(sample_dataset)
 
@@ -301,8 +301,8 @@ class TestSelectFeaturesAndTarget:
         
         # Mock user inputs - need to patch all input calls
         with patch("builtins.input", return_value=""):  # Mock empty input for feature list since we're using auto
-            with patch("myclt.common.input_validation.ask_int", return_value=3):  # Target (Salary)
-                with patch("myclt.common.input_validation.ask_yes_no", return_value=False):  # Auto features
+            with patch("myclt.ML.base.base_data.ask_int", return_value=3):  # Target (Salary)
+                with patch("myclt.ML.base.base_data.ask_yes_no", return_value=False):  # Auto features
                     with pytest.raises(ValueError, match="non-numeric values"):
                         select_features_and_target(dataset)
 

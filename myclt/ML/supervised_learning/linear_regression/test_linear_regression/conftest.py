@@ -16,22 +16,23 @@ from myclt.ML.supervised_learning.linear_regression.preprocessing import (
 
 # Project paths
 PROJECT_ROOT = Path(__file__).parents[5]
-DATASETS_DIR = PROJECT_ROOT / "assets" / "test_datasets" / "linear_regression_datasets" / "multiple_linear_regression_datasets"
+# Note: Directory has parentheses in the name, so we match the actual folder structure
+DATASETS_DIR = PROJECT_ROOT / "assets" / "test_datasets" / "linear_regression_datasets(multiple_linear_regression_datasets)"
 
-# Dataset specifications for real datasets
+# Dataset specifications for real datasets (using actual file names in the test directory)
 DATASET_SPECS = {
     "marketing": {
-        "file": "marketing.csv",
+        "file": "basic_marketing_dataset.csv",
         "columns": ["TV", "Radio", "Newspaper", "Sales"],
         "target": "Sales"
     },
     "real_estate": {
-        "file": "real_estate.csv", 
+        "file": "medium_difficulty_real_estate_dataset.csv", 
         "columns": ["house_age", "distance_to_mrt", "num_convenience_stores", "house_price"],
         "target": "house_price"
     },
     "lifestyle": {
-        "file": "lifestyle.csv",
+        "file": "high_difficulty_lifestyle_dataset.csv",
         "columns": ["Age", "Income", "Spending", "Savings"],
         "target": "Spending"
     }

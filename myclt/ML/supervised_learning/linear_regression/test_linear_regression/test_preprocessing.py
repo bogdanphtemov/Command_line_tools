@@ -26,8 +26,6 @@ class TestPreprocessing:
         y = 2 * X[:, 0] + 1
         return X, y
     
-    @pytest.fixture
-
     def test_train_test_split_dimensions_and_reproducibility(self, synthetic_data_2d):
         """Test split dimensions and that same seed gives same results."""
         X, y = synthetic_data_2d
@@ -310,12 +308,7 @@ class TestPreprocessing:
                 train_test_split(X, y, valid_test_size, seed=42)
             except ValueError as e:
                 pytest.fail(f"Valid test_size {valid_test_size} should not raise ValueError: {e}")
-    def small_dataset_1d(self) -> Tuple[np.ndarray, np.ndarray]:
-        """Small dataset with only 10 samples (edge case)."""
-        np.random.seed(42)
-        X = np.random.randn(10, 1)
-        y = 2 * X[:, 0] + 1
-        return X, y
+
     
     @pytest.fixture  
     def single_sample_data(self) -> Tuple[np.ndarray, np.ndarray]:
